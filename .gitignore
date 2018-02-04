@@ -1,0 +1,16 @@
+# Binaries for programs and plugins
+*.so
+*.dylib
+
+.DS_Store
+photos-uploader
+
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
