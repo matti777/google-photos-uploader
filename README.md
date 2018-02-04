@@ -2,6 +2,10 @@
 
 A command line utility for uploading a local directory structure into Google Photos as new Albums. Each directory is uploaded as a new Album whose name is derived from the name of the directory.
 
+## WORK IN PROGRESS.
+
+This is project just being started.
+
 ## Install dependencies:
 
 ```sh
