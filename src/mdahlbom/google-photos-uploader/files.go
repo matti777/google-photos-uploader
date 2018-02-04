@@ -8,8 +8,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/golang/protobuf/proto"
 	"mdahlbom/google-photos-uploader/pb"
+
+	"github.com/golang/protobuf/proto"
 )
 
 const (
@@ -53,6 +54,11 @@ func readJournalFile(dir string) (*pb.Journal, error) {
 
 	in, err := ioutil.ReadFile(fileName)
 	if err != nil {
+		if os.IsNotExist(err) {
+			log.Debugf("Journal file '%v' does not exist", fileName)
+			return nil, nil
+		}
+
 		log.Errorf("Error reading journal file: %v", err)
 		return nil, err
 	}

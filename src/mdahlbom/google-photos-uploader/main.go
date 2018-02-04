@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"mdahlbom/google-photos-uploader/pb"
+
 	logging "github.com/op/go-logging"
 	"github.com/urfave/cli"
 )
@@ -24,6 +26,51 @@ func setupLogging() {
 	} else {
 		logging.SetLevel(logging.INFO, "uploader")
 	}
+}
+
+func processDir(dir string, recursive bool) {
+	// Check that the diretory exists
+	if exists, _ := directoryExists(dir); !exists {
+		log.Fatalf("Directory '%v' does not exist!", dir)
+	}
+
+	// Read the journal file of the directory
+	journal, err := readJournalFile(dir)
+	if err != nil {
+		log.Fatalf("Error reading Journal file: %v", err)
+	}
+
+	if journal == nil {
+		// There is no journal file; create new one
+		journal = &pb.Journal{}
+	}
+
+	log.Debugf("Read journal file: %+v", journal)
+
+	// Read all the files in this directory
+	d, err := os.Open(dir)
+	if err != nil {
+		log.Fatalf("Failed to open directory '%v': %v", dir, err)
+	}
+
+	infos, err := d.Readdir(0)
+	if err != nil {
+		log.Fatalf("Failed to read directory '%v': %v", dir, err)
+	}
+
+	for _, info := range infos {
+		log.Debugf("Name: %v", info.Name())
+		if info.Mode()&os.ModeSymlink != 0 {
+			log.Debugf("Skipping symlink..")
+			continue
+		}
+
+		if info.IsDir() {
+			log.Debugf("It is a directory.")
+		}
+	}
+
+	//TODO recurse
 }
 
 func defaultAction(c *cli.Context) error {
@@ -48,10 +95,7 @@ func defaultAction(c *cli.Context) error {
 	}
 	log.Debugf("Cleaned baseDir: %v", baseDir)
 
-	// Check that the diretory exists
-	if exists, _ := directoryExists(baseDir); !exists {
-		log.Fatalf("Directory '%v' does not exist!", baseDir)
-	}
+	processDir(baseDir, false)
 
 	return nil
 }

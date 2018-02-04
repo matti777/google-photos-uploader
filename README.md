@@ -49,4 +49,4 @@ For any Go code you write to this module, follow these guidelines:
 
 ## Contact
 
-For any questions, concact Matti Dahlbom <matti@777-team.org.fi>.
+For any questions, concact Matti Dahlbom <matti@777-team.org>.
