@@ -5,6 +5,7 @@
 .DS_Store
 photos-uploader
 test
+.photos-uploader.journal
 
 *~
 \#*\#

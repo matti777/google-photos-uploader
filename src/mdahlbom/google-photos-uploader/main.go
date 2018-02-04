@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"mdahlbom/google-photos-uploader/pb"
 
+	"github.com/golang/protobuf/ptypes"
 	logging "github.com/op/go-logging"
 	"github.com/urfave/cli"
 )
@@ -14,6 +16,12 @@ import (
 // Our local logger
 var log = logging.MustGetLogger("uploader")
 
+// Filename extensions to consider as images
+var (
+	imageExtensions = []string{"jpg", "jpeg"}
+)
+
+// Configures the local logger
 func setupLogging() {
 	var format = logging.MustStringFormatter("%{color}%{time:15:04:05.000} " +
 		"%{shortfunc} ▶ %{level} " +
@@ -28,7 +36,58 @@ func setupLogging() {
 	}
 }
 
-func processDir(dir string, recursive bool) {
+func mustAddJournalEntry(dir string, name string, isDir bool,
+	journal *pb.Journal, journalMap *map[string]*pb.JournalEntry) {
+
+	// Make sure there isnt already such an entry (sanity check)
+	for _, e := range journal.Entries {
+		if e.Name == name {
+			log.Fatalf("Already found journal entry '%v' in journal", name)
+		}
+	}
+	if (*journalMap)[name] != nil {
+		log.Fatalf("Already found journal map entry '%v' in journal", name)
+	}
+
+	entry := &pb.JournalEntry{Name: name, IsDirectory: isDir,
+		Completed: ptypes.TimestampNow()}
+
+	journal.Entries = append(journal.Entries, entry)
+	(*journalMap)[name] = entry
+
+	// Save the journal
+	mustWriteJournalFile(dir, journal)
+	log.Debugf("Added journal entry: %+v", entry)
+}
+
+// Creates a map of the journal's file name entries for faster access
+func newJournalMap(journal *pb.Journal) map[string]*pb.JournalEntry {
+	m := map[string]*pb.JournalEntry{}
+
+	if journal.Entries == nil {
+		return m
+	}
+
+	for _, e := range journal.Entries {
+		m[e.Name] = e
+	}
+
+	return m
+}
+
+// Simulates the upload of a file.
+func simulateUpload(file *os.FileInfo) error {
+	for i := 0; i < 5; i++ {
+		time.Sleep(time.Millisecond * 250)
+		log.Debugf("Uploading..")
+	}
+
+	return nil
+}
+
+// Processes all the entries in a single directory. Aborts as soon as
+// an upload fails.
+func processDir(dir string, recurse bool) {
 	// Check that the diretory exists
 	if exists, _ := directoryExists(dir); !exists {
 		log.Fatalf("Directory '%v' does not exist!", dir)
@@ -47,6 +106,9 @@ func processDir(dir string, recursive bool) {
 
 	log.Debugf("Read journal file: %+v", journal)
 
+	// Create a lookup map for faster access
+	journalMap := newJournalMap(journal)
+
 	// Read all the files in this directory
 	d, err := os.Open(dir)
 	if err != nil {
@@ -59,18 +121,48 @@ func processDir(dir string, recursive bool) {
 	}
 
 	for _, info := range infos {
-		log.Debugf("Name: %v", info.Name())
+		name := info.Name()
+		log.Debugf("Name: %v", name)
+
 		if info.Mode()&os.ModeSymlink != 0 {
 			log.Debugf("Skipping symlink..")
 			continue
 		}
 
+		entry := journalMap[name]
+		log.Debugf("entry: %+v", entry)
+
+		if entry != nil {
+			log.Debugf("Already uploaded, skipping..")
+			continue
+		}
+
+		entryFileName := filepath.Join(dir, name)
+		log.Debugf("entryFileName: %v", entryFileName)
+
 		if info.IsDir() {
-			log.Debugf("It is a directory.")
+			if recurse {
+				log.Debugf("Recursing into directory: %v", name)
+				processDir(entryFileName, recurse)
+				mustAddJournalEntry(dir, name, true, journal, &journalMap)
+			} else {
+				log.Debugf("Non-recursive; skipping directory: %v", name)
+			}
+		} else {
+			log.Debugf("Uploading file '%v'..", name)
+			if err := simulateUpload(&info); err != nil {
+				log.Fatalf("File upload failed: %v", err)
+			} else {
+				// Uploaded file successfully
+				log.Debugf("Passing journalMap: %v, %v",
+					journalMap, &journalMap)
+
+				mustAddJournalEntry(dir, name, false, journal, &journalMap)
+			}
 		}
 	}
 
-	//TODO recurse
+	log.Debugf("Directory '%v' uploaded OK.")
 }
 
 func defaultAction(c *cli.Context) error {

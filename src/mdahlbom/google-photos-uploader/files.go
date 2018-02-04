@@ -32,7 +32,7 @@ func directoryExists(dir string) (bool, error) {
 	}
 }
 
-func writeJournalFile(dir string, journal *pb.Journal) error {
+func mustWriteJournalFile(dir string, journal *pb.Journal) {
 	fileName := filepath.Join(dir, journalFileName)
 	log.Debugf("Writing Journal file: %v", fileName)
 
@@ -44,8 +44,6 @@ func writeJournalFile(dir string, journal *pb.Journal) error {
 	if err := ioutil.WriteFile(fileName, out, 0644); err != nil {
 		log.Fatalf("Failed to write journal file: %v", err)
 	}
-
-	return nil
 }
 
 func readJournalFile(dir string) (*pb.Journal, error) {
