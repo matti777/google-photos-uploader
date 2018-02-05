@@ -9,6 +9,8 @@ import (
 	"mdahlbom/google-photos-uploader/pb"
 
 	"github.com/golang/protobuf/ptypes"
+	"github.com/gosuri/uiprogress"
+	//	"github.com/gosuri/uiprogress/util/strutil"
 	logging "github.com/op/go-logging"
 	"github.com/urfave/cli"
 )
@@ -76,40 +78,45 @@ func newJournalMap(journal *pb.Journal) map[string]*pb.JournalEntry {
 }
 
 // Simulates the upload of a file.
-func simulateUpload(file *os.FileInfo) error {
-	for i := 0; i < 5; i++ {
+func simulateUpload(dir string, file os.FileInfo) error {
+	const steps = 5
+
+	log.Debugf("Uploading file %v (%v bytes) ..", file.Name(), file.Size())
+
+	bar := uiprogress.AddBar(steps).PrependElapsed().AppendCompleted()
+	bar.PrependFunc(func(b *uiprogress.Bar) string {
+		return file.Name()
+	})
+	bar.Fill = '#'
+	bar.Head = ' '
+	bar.Empty = ' '
+
+	for i := 0; i < steps; i++ {
 		time.Sleep(time.Millisecond * 250)
-		log.Debugf("Uploading..")
+		bar.Set(i + 1)
 	}
 
 	return nil
 }
 
-// Processes all the entries in a single directory. Aborts as soon as
-// an upload fails.
-func processDir(dir string, recurse bool) {
-	// Check that the diretory exists
-	if exists, _ := directoryExists(dir); !exists {
-		log.Fatalf("Directory '%v' does not exist!", dir)
+// Finds the longest file name
+func findLongestName(infos []os.FileInfo) int {
+	longest := 0
+
+	for _, info := range infos {
+		if len(info.Name()) > longest {
+			longest = len(info.Name())
+		}
 	}
 
-	// Read the journal file of the directory
-	journal, err := readJournalFile(dir)
-	if err != nil {
-		log.Fatalf("Error reading Journal file: %v", err)
-	}
+	return longest
+}
 
-	if journal == nil {
-		// There is no journal file; create new one
-		journal = &pb.Journal{}
-	}
+// Scans a directory for files and subdirectories; returns the lists of
+// unprocessed files and subdirectories. Panics on error.
+func mustScanDir(dir string, journal *pb.Journal,
+	journalMap map[string]*pb.JournalEntry) ([]os.FileInfo, []os.FileInfo) {
 
-	log.Debugf("Read journal file: %+v", journal)
-
-	// Create a lookup map for faster access
-	journalMap := newJournalMap(journal)
-
-	// Read all the files in this directory
 	d, err := os.Open(dir)
 	if err != nil {
 		log.Fatalf("Failed to open directory '%v': %v", dir, err)
@@ -120,9 +127,12 @@ func processDir(dir string, recurse bool) {
 		log.Fatalf("Failed to read directory '%v': %v", dir, err)
 	}
 
+	files := []os.FileInfo{}
+	dirs := []os.FileInfo{}
+
 	for _, info := range infos {
 		name := info.Name()
-		log.Debugf("Name: %v", name)
+		log.Debugf("Scan found name: %v", name)
 
 		if info.Mode()&os.ModeSymlink != 0 {
 			log.Debugf("Skipping symlink..")
@@ -130,39 +140,130 @@ func processDir(dir string, recurse bool) {
 		}
 
 		entry := journalMap[name]
-		log.Debugf("entry: %+v", entry)
 
 		if entry != nil {
 			log.Debugf("Already uploaded, skipping..")
 			continue
 		}
 
-		entryFileName := filepath.Join(dir, name)
-		log.Debugf("entryFileName: %v", entryFileName)
-
 		if info.IsDir() {
-			if recurse {
-				log.Debugf("Recursing into directory: %v", name)
-				processDir(entryFileName, recurse)
-				mustAddJournalEntry(dir, name, true, journal, &journalMap)
-			} else {
-				log.Debugf("Non-recursive; skipping directory: %v", name)
-			}
+			dirs = append(dirs, info)
 		} else {
-			log.Debugf("Uploading file '%v'..", name)
-			if err := simulateUpload(&info); err != nil {
-				log.Fatalf("File upload failed: %v", err)
-			} else {
-				// Uploaded file successfully
-				log.Debugf("Passing journalMap: %v, %v",
-					journalMap, &journalMap)
-
-				mustAddJournalEntry(dir, name, false, journal, &journalMap)
-			}
+			files = append(files, info)
 		}
 	}
 
-	log.Debugf("Directory '%v' uploaded OK.")
+	return files, dirs
+}
+
+// Processes all the entries in a single directory. Aborts as soon as
+// an upload fails.
+func mustProcessDir(dir string, recurse, disregardJournal bool) {
+	// Check that the diretory exists
+	if exists, _ := directoryExists(dir); !exists {
+		log.Fatalf("Directory '%v' does not exist!", dir)
+	}
+
+	log.Debugf("Processing directory %v ..", dir)
+
+	journal := &pb.Journal{}
+
+	if !disregardJournal {
+		// Read the journal file of the directory
+		j, err := readJournalFile(dir)
+		if err != nil {
+			log.Fatalf("Error reading Journal file: %v", err)
+		} else if j != nil {
+			journal = j
+		}
+	}
+
+	log.Debugf("Read journal file: %+v", journal)
+
+	// Create a lookup map for faster access
+	journalMap := newJournalMap(journal)
+
+	files, dirs := mustScanDir(dir, journal, journalMap)
+
+	// Process the files in this directory firs
+	for _, f := range files {
+		if err := simulateUpload(dir, f); err != nil {
+			log.Fatalf("File upload failed: %v", err)
+		} else {
+			// Uploaded file successfully
+			mustAddJournalEntry(dir, f.Name(), false, journal, &journalMap)
+		}
+	}
+
+	// Then (possibly recursively) process the subdirectories
+	for _, d := range dirs {
+		if recurse {
+			subDir := filepath.Join(dir, d.Name())
+			mustProcessDir(subDir, recurse, disregardJournal)
+			mustAddJournalEntry(dir, d.Name(), true, journal, &journalMap)
+		} else {
+			log.Debugf("Non-recursive; skipping directory: %v", d.Name())
+		}
+	}
+
+	/*
+		// Create a lookup map for faster access
+		journalMap := newJournalMap(journal)
+
+		// Read all the files in this directory
+		d, err := os.Open(dir)
+		if err != nil {
+			log.Fatalf("Failed to open directory '%v': %v", dir, err)
+		}
+
+		infos, err := d.Readdir(0)
+		if err != nil {
+			log.Fatalf("Failed to read directory '%v': %v", dir, err)
+		}
+
+		for _, info := range infos {
+			name := info.Name()
+			log.Debugf("Name: %v", name)
+
+			if info.Mode()&os.ModeSymlink != 0 {
+				log.Debugf("Skipping symlink..")
+				continue
+			}
+
+			entry := journalMap[name]
+			log.Debugf("entry: %+v", entry)
+
+			if entry != nil {
+				log.Debugf("Already uploaded, skipping..")
+				continue
+			}
+
+			entryFileName := filepath.Join(dir, name)
+			log.Debugf("entryFileName: %v", entryFileName)
+
+			if info.IsDir() {
+				if recurse {
+					log.Debugf("Recursing into directory: %v", name)
+					processDir(entryFileName, recurse, disregardJournal)
+					mustAddJournalEntry(dir, name, true, journal, &journalMap)
+				} else {
+					log.Debugf("Non-recursive; skipping directory: %v", name)
+				}
+			} else {
+				log.Debugf("Uploading file '%v'..", name)
+				if err := simulateUpload(info); err != nil {
+					log.Fatalf("File upload failed: %v", err)
+				} else {
+					// Uploaded file successfully
+					log.Debugf("Passing journalMap: %v, %v",
+						journalMap, &journalMap)
+
+					mustAddJournalEntry(dir, name, false, journal, &journalMap)
+				}
+			}
+		}
+	*/
+	log.Debugf("Directory '%v' uploaded OK.", dir)
 }
 
 func defaultAction(c *cli.Context) error {
@@ -187,7 +288,14 @@ func defaultAction(c *cli.Context) error {
 	}
 	log.Debugf("Cleaned baseDir: %v", baseDir)
 
-	processDir(baseDir, false)
+	disregardJournal := c.BoolT("disregard-journal")
+	if disregardJournal {
+		log.Debugf("Disregarding reading journal files..")
+	}
+
+	uiprogress.Start()
+	mustProcessDir(baseDir, false, disregardJournal)
+	uiprogress.Stop()
 
 	return nil
 }
@@ -209,6 +317,13 @@ func main() {
 	app.Copyright = "(c) 2018 Matti Dahlbom"
 	app.Version = "0.0.1-alpha"
 	app.Action = defaultAction
+	app.Flags = []cli.Flag{
+		cli.BoolTFlag{
+			Name:  "disregard-journal, d",
+			Usage: "Disregard reading journal files; re-upload everything",
+		},
+	}
+
 	//app.Commands = commands
 	app.Run(os.Args)
 }

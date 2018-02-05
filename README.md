@@ -12,6 +12,7 @@ This is project just being started.
 go get -u github.com/op/go-logging
 go get -u github.com/urfave/cli
 go get -u github.com/golang/protobuf
+go get -u github.com/gosuri/uiprogress
 ```
 
 ## Building the application
