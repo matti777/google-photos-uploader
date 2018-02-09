@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"mdahlbom/google-photos-uploader/pb"
@@ -22,6 +23,10 @@ var log = logging.MustGetLogger("uploader")
 var (
 	// Filename extensions to consider as images
 	imageExtensions = []string{"jpg", "jpeg"}
+
+	// Directory name -> photos folder substitution pattern regex
+	//TODO link to the format
+	substitutionRegex = ""
 
 	// Whether to skip (assume Yes) all confirmations)
 	skipConfirmation = false
@@ -276,8 +281,27 @@ func defaultAction(c *cli.Context) error {
 		log.Debugf("Disregarding reading journal files..")
 	}
 
+	recursive := GlobalBoolT(c, "recursive")
+	if recursive {
+		log.Debugf("Will recurse into subdirectories")
+	}
+
 	skipConfirmation = GlobalBoolT(c, "yes")
 	dryRun = GlobalBoolT(c, "dry-run")
+
+	exts := c.String("extensions")
+	if exts != "" {
+		s := strings.Split(exts, ",")
+		imageExtensions = make([]string, len(s))
+		for i, item := range s {
+			imageExtensions[i] = strings.Trim(item, " ")
+		}
+	}
+
+	log.Debugf("Using image extensions: %v", imageExtensions)
+
+	substitutionRegex := c.String("regex")
+	log.Debugf("Using substitution regex: %v", substitutionRegex)
 
 	uiprogress.Start()
 	mustProcessDir(baseDir, false, disregardJournal)
@@ -319,6 +343,17 @@ func main() {
 		cli.BoolTFlag{
 			Name:  "dry-run",
 			Usage: "Specify to just scan, not actually upload anything",
+		},
+		cli.StringFlag{
+			Name: "regex, re",
+			Usage: "Directory name -> Photos Folder substition " +
+				"regex, default is no substitution. " +
+				"TODO: link to the format",
+		},
+		cli.StringFlag{
+			Name: "extensions, e",
+			Usage: "File extensions to consider as uploadable images;  " +
+				"eg. \"jpg, jpeg, png\". Default is \"jpg, jpeg\"",
 		},
 	}
 
