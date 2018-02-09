@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,9 +19,15 @@ import (
 // Our local logger
 var log = logging.MustGetLogger("uploader")
 
-// Filename extensions to consider as images
 var (
+	// Filename extensions to consider as images
 	imageExtensions = []string{"jpg", "jpeg"}
+
+	// Whether to skip (assume Yes) all confirmations)
+	skipConfirmation = false
+
+	// Whether doing a 'dry run', ie not actually sending anything.
+	dryRun = false
 )
 
 // Configures the local logger
@@ -35,6 +42,25 @@ func setupLogging() {
 		logging.SetLevel(logging.DEBUG, "uploader")
 	} else {
 		logging.SetLevel(logging.INFO, "uploader")
+	}
+}
+
+// Asks the user interactively a confirmation question; if the user declines
+// (answers anything but Y or defalut - empty string - stop execution.
+func mustConfirm(format string, args ...interface{}) {
+	if skipConfirmation {
+		return
+	}
+
+	text := fmt.Sprintf(format, args...)
+	fmt.Print(fmt.Sprintf("%v [Y/n] ", text))
+	reader := bufio.NewReader(os.Stdin)
+	input, _ := reader.ReadString('\n')
+
+	log.Debugf("input: '%v'", input)
+
+	if input != "Y\n" && input != "\n" {
+		os.Exit(1)
 	}
 }
 
@@ -164,6 +190,9 @@ func mustProcessDir(dir string, recurse, disregardJournal bool) {
 		log.Fatalf("Directory '%v' does not exist!", dir)
 	}
 
+	dirName := filepath.Base(dir)
+	mustConfirm("About to upload directory '%v' - continue?", dirName)
+
 	log.Debugf("Processing directory %v ..", dir)
 
 	journal := &pb.Journal{}
@@ -206,64 +235,18 @@ func mustProcessDir(dir string, recurse, disregardJournal bool) {
 		}
 	}
 
-	/*
-		// Create a lookup map for faster access
-		journalMap := newJournalMap(journal)
+	log.Debugf("Directory '%v' uploaded OK.", dirName)
+}
 
-		// Read all the files in this directory
-		d, err := os.Open(dir)
-		if err != nil {
-			log.Fatalf("Failed to open directory '%v': %v", dir, err)
-		}
-
-		infos, err := d.Readdir(0)
-		if err != nil {
-			log.Fatalf("Failed to read directory '%v': %v", dir, err)
-		}
-
-		for _, info := range infos {
-			name := info.Name()
-			log.Debugf("Name: %v", name)
-
-			if info.Mode()&os.ModeSymlink != 0 {
-				log.Debugf("Skipping symlink..")
-				continue
-			}
-
-			entry := journalMap[name]
-			log.Debugf("entry: %+v", entry)
-
-			if entry != nil {
-				log.Debugf("Already uploaded, skipping..")
-				continue
-			}
-
-			entryFileName := filepath.Join(dir, name)
-			log.Debugf("entryFileName: %v", entryFileName)
-
-			if info.IsDir() {
-				if recurse {
-					log.Debugf("Recursing into directory: %v", name)
-					processDir(entryFileName, recurse, disregardJournal)
-					mustAddJournalEntry(dir, name, true, journal, &journalMap)
-				} else {
-					log.Debugf("Non-recursive; skipping directory: %v", name)
-				}
-			} else {
-				log.Debugf("Uploading file '%v'..", name)
-				if err := simulateUpload(info); err != nil {
-					log.Fatalf("File upload failed: %v", err)
-				} else {
-					// Uploaded file successfully
-					log.Debugf("Passing journalMap: %v, %v",
-						journalMap, &journalMap)
-
-					mustAddJournalEntry(dir, name, false, journal, &journalMap)
-				}
-			}
-		}
-	*/
-	log.Debugf("Directory '%v' uploaded OK.", dir)
+// There seems to be a bug in the GolbalBoolT API, or I am using
+// it incorrectly - however, this method checks for the presence of a BoolT
+// flag and returns false if it is not specified.
+func GlobalBoolT(c *cli.Context, name string) bool {
+	if !c.IsSet(name) {
+		return false
+	} else {
+		return c.GlobalBoolT(name)
+	}
 }
 
 func defaultAction(c *cli.Context) error {
@@ -288,10 +271,13 @@ func defaultAction(c *cli.Context) error {
 	}
 	log.Debugf("Cleaned baseDir: %v", baseDir)
 
-	disregardJournal := c.BoolT("disregard-journal")
+	disregardJournal := GlobalBoolT(c, "disregard-journal")
 	if disregardJournal {
 		log.Debugf("Disregarding reading journal files..")
 	}
+
+	skipConfirmation = GlobalBoolT(c, "yes")
+	dryRun = GlobalBoolT(c, "dry-run")
 
 	uiprogress.Start()
 	mustProcessDir(baseDir, false, disregardJournal)
@@ -321,6 +307,18 @@ func main() {
 		cli.BoolTFlag{
 			Name:  "disregard-journal, d",
 			Usage: "Disregard reading journal files; re-upload everything",
+		},
+		cli.BoolTFlag{
+			Name:  "recursive, r",
+			Usage: "Process subdirectories recursively",
+		},
+		cli.BoolTFlag{
+			Name:  "yes, y",
+			Usage: "Answer Yes to all confirmations",
+		},
+		cli.BoolTFlag{
+			Name:  "dry-run",
+			Usage: "Specify to just scan, not actually upload anything",
 		},
 	}
 
