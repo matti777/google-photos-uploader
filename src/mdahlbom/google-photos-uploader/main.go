@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,40 +33,6 @@ var (
 	// Whether doing a 'dry run', ie not actually sending anything.
 	dryRun = false
 )
-
-// Configures the local logger
-func setupLogging() {
-	var format = logging.MustStringFormatter("%{color}%{time:15:04:05.000} " +
-		"%{shortfunc} ▶ %{level} " +
-		"%{color:reset} %{message}")
-	backend := logging.NewLogBackend(os.Stderr, "", 0)
-	formatter := logging.NewBackendFormatter(backend, format)
-	logging.SetBackend(formatter)
-	if enableDebugLogging {
-		logging.SetLevel(logging.DEBUG, "uploader")
-	} else {
-		logging.SetLevel(logging.INFO, "uploader")
-	}
-}
-
-// Asks the user interactively a confirmation question; if the user declines
-// (answers anything but Y or defalut - empty string - stop execution.
-func mustConfirm(format string, args ...interface{}) {
-	if skipConfirmation {
-		return
-	}
-
-	text := fmt.Sprintf(format, args...)
-	fmt.Print(fmt.Sprintf("%v [Y/n] ", text))
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-
-	log.Debugf("input: '%v'", input)
-
-	if input != "Y\n" && input != "\n" {
-		os.Exit(1)
-	}
-}
 
 func mustAddJournalEntry(dir string, name string, isDir bool,
 	journal *pb.Journal, journalMap *map[string]*pb.JournalEntry) {
@@ -155,19 +120,6 @@ func upload(dir, dirName string, file os.FileInfo,
 	defer progress.Stop()
 
 	return simulateUpload(bar, dir, dirName, file)
-}
-
-// Finds the longest file name
-func findLongestName(infos []os.FileInfo) int {
-	longest := 0
-
-	for _, info := range infos {
-		if len(info.Name()) > longest {
-			longest = len(info.Name())
-		}
-	}
-
-	return longest
 }
 
 // Scans a directory for files and subdirectories; returns the lists of
@@ -279,17 +231,6 @@ func mustProcessDir(dir string, recurse, disregardJournal bool) {
 	}
 
 	log.Debugf("Directory '%v' uploaded OK.", dirName)
-}
-
-// There seems to be a bug in the GolbalBoolT API, or I am using
-// it incorrectly - however, this method checks for the presence of a BoolT
-// flag and returns false if it is not specified.
-func GlobalBoolT(c *cli.Context, name string) bool {
-	if !c.IsSet(name) {
-		return false
-	} else {
-		return c.GlobalBoolT(name)
-	}
 }
 
 func defaultAction(c *cli.Context) error {
