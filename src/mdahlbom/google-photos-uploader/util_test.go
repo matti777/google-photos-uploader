@@ -1,10 +1,29 @@
 package main
 
 import (
-	//"regexp/syntax"
 	"strings"
 	"testing"
 )
+
+func TestReplaceInString(t *testing.T) {
+	if r, err := replaceInString("foo_bar", "_, ,\"'\",-"); err != nil {
+		t.Fatalf("Failed to replace: %v", err)
+	} else if r != "foo bar" {
+		t.Errorf("Replacement incorrect: %v", r)
+	}
+
+	if r, err := replaceInString("foo_bar_baz-2010", "_, ,-, - "); err != nil {
+		t.Fatalf("Failed to replace: %v", err)
+	} else if r != "foo bar baz - 2010" {
+		t.Errorf("Replacement incorrect: %v", r)
+	}
+
+	if r, err := replaceInString("foo_bar_baz", ""); err != nil {
+		t.Fatalf("Failed to replace: %v", err)
+	} else if r != "foo_bar_baz" {
+		t.Errorf("Replacement incorrect: %v", r)
+	}
+}
 
 func TestCapitalization(t *testing.T) {
 	r1 := strings.Title("foo_bar_baz")
@@ -17,14 +36,3 @@ func TestCapitalization(t *testing.T) {
 		t.Errorf("Capitalization doesnt match: %v", r2)
 	}
 }
-
-/*
-func TestRegtexReplace(t *testing.T) {
-	re, err := syntax.Parse("s/_/\\ ", 0)
-	if err != nil {
-		t.Fatalf("Failed to parse regex: %v", err)
-	}
-
-	t.Error("Replacement doesnt match")
-}
-*/

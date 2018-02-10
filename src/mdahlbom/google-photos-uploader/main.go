@@ -23,9 +23,9 @@ var (
 	// Filename extensions to consider as images
 	imageExtensions = []string{"jpg", "jpeg"}
 
-	// Directory name -> photos folder substitution pattern regex
-	//TODO link to the format
-	substitutionRegex = ""
+	// Directory name -> photos folder substitution CSV string; should
+	// be formatted as old1,new1,old2,new2, ... where new1 replaces old1 etc
+	nameSubstitutionTokens = ""
 
 	// Whether to skip (assume Yes) all confirmations)
 	skipConfirmation = false
@@ -185,7 +185,13 @@ func mustProcessDir(dir string, recurse, disregardJournal bool) {
 	}
 
 	dirName := filepath.Base(dir)
-	mustConfirm("About to upload directory '%v' - continue?", dirName)
+	folderName, err := replaceInString(dirName, nameSubstitutionTokens)
+	if err != nil {
+		log.Fatalf("Invalid replacement pattern: %v", nameSubstitutionTokens)
+	}
+
+	mustConfirm("About to upload directory '%v' as folder '%v' - continue?",
+		dirName, folderName)
 
 	log.Debugf("Processing directory %v ..", dir)
 
@@ -277,8 +283,9 @@ func defaultAction(c *cli.Context) error {
 
 	log.Debugf("Using image extensions: %v", imageExtensions)
 
-	substitutionRegex := c.String("regex")
-	log.Debugf("Using substitution regex: %v", substitutionRegex)
+	nameSubstitutionTokens = c.String("folder-name-substitutions")
+	log.Debugf("Using folder name substitution tokens: %v",
+		nameSubstitutionTokens)
 
 	mustProcessDir(baseDir, recursive, disregardJournal)
 
@@ -296,6 +303,9 @@ func main() {
 	app := cli.NewApp()
 	app.EnableBashCompletion = true
 	app.Name = appname
+	app.ArgsUsage = "[directory]"
+	app.Usage = "A command line Google Photos upload utility"
+	app.UsageText = fmt.Sprintf("%v [options] directory", appname)
 	app.Description = fmt.Sprintf("Command-line utility for uploading "+
 		"photos to Google Photos from a local disk directory. "+
 		"For help, run '%v help'", appname)
@@ -320,10 +330,13 @@ func main() {
 			Usage: "Specify to just scan, not actually upload anything",
 		},
 		cli.StringFlag{
-			Name: "regex, re",
+			Name: "folder-name-substitutions, s",
 			Usage: "Directory name -> Photos Folder substition " +
-				"regex, default is no substitution. " +
-				"TODO: link to the format",
+				"tokens, default is no substitution. " +
+				"The format is CSV like so: old1,new1,old2,new2 where token " +
+				"new1 would replace token old1 etc. For example to replace " +
+				"all underscores with spaces and add spaces around " +
+				"all dashes, specify -s \"_, ,-, - \"",
 		},
 		cli.StringFlag{
 			Name: "extensions, e",

@@ -2,8 +2,11 @@ package main
 
 import (
 	"bufio"
+	"encoding/csv"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	logging "github.com/op/go-logging"
 	"github.com/urfave/cli"
@@ -36,8 +39,6 @@ func mustConfirm(format string, args ...interface{}) {
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 
-	log.Debugf("input: '%v'", input)
-
 	if input != "Y\n" && input != "\n" {
 		os.Exit(1)
 	}
@@ -65,4 +66,35 @@ func GlobalBoolT(c *cli.Context, name string) bool {
 	} else {
 		return c.GlobalBoolT(name)
 	}
+}
+
+// Replaces substrings in the string with other strings, using strings.Replacer.
+// The tokens parameter should be formatted as a valid CSV.
+func replaceInString(s, tokens string) (string, error) {
+	if tokens == "" {
+		return s, nil
+	}
+
+	log.Debugf("Got tokens: %v", tokens)
+
+	r := csv.NewReader(strings.NewReader(tokens))
+	records, err := r.ReadAll()
+	if err != nil {
+		log.Errorf("Failed to read CSV: %v", err)
+		return "", err
+	}
+
+	if len(records) != 1 {
+		log.Errorf("Invalid number of CSV records: %v", len(records))
+		return "", errors.New("Invalid number of CSV records. " +
+			"Only single line CSV supported.")
+	}
+
+	tokenArray := records[0]
+
+	log.Debugf("tokenArray: %v", tokenArray)
+
+	replacer := strings.NewReplacer(tokenArray...)
+
+	return replacer.Replace(s), nil
 }
