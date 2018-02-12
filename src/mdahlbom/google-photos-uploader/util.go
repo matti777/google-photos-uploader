@@ -3,13 +3,27 @@ package main
 import (
 	"bufio"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
 
 	logging "github.com/op/go-logging"
 	"github.com/urfave/cli"
+)
+
+// Application configuration file structure
+type appConfiguration struct {
+	ClientID     string
+	ClientSecret string
+}
+
+const (
+	// App configuration file name
+	appConfigFilename = ".photos-uploader.config"
 )
 
 // Configures the local logger
@@ -25,6 +39,39 @@ func setupLogging() {
 	} else {
 		logging.SetLevel(logging.INFO, "uploader")
 	}
+}
+
+// Returns the path to the app config file. Panics on failure.
+func mustGetAppConfigPath() string {
+	u, err := user.Current()
+	if err != nil {
+		log.Fatalf("Failed to get current user: %v", err)
+	}
+
+	return filepath.Join(u.HomeDir, appConfigFilename)
+}
+
+// Reads the app configuration file. If the file is not found, returns
+// an empty config
+func readAppConfig() *appConfiguration {
+	appCfgFilePath := mustGetAppConfigPath()
+	log.Debugf("Got app config file path: %v", appCfgFilePath)
+
+	file, err := os.Open(appCfgFilePath)
+	if err != nil {
+		log.Debugf("Failed to open app cfg file; perhaps it doesnt "+
+			"exist? error: %v", err)
+		return &appConfiguration{}
+	}
+
+	decoder := json.NewDecoder(file)
+	cfg := new(appConfiguration)
+	if err := decoder.Decode(cfg); err != nil {
+		log.Errorf("Failed to read app config file: %v", err)
+		return &appConfiguration{}
+	}
+
+	return cfg
 }
 
 // Asks the user interactively a confirmation question; if the user declines
@@ -75,8 +122,6 @@ func replaceInString(s, tokens string) (string, error) {
 		return s, nil
 	}
 
-	log.Debugf("Got tokens: %v", tokens)
-
 	r := csv.NewReader(strings.NewReader(tokens))
 	records, err := r.ReadAll()
 	if err != nil {
@@ -91,9 +136,6 @@ func replaceInString(s, tokens string) (string, error) {
 	}
 
 	tokenArray := records[0]
-
-	log.Debugf("tokenArray: %v", tokenArray)
-
 	replacer := strings.NewReplacer(tokenArray...)
 
 	return replacer.Replace(s), nil

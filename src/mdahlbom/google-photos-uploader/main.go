@@ -20,12 +20,19 @@ import (
 var log = logging.MustGetLogger("uploader")
 
 var (
+	// Application configuration
+	appConfig *appConfiguration
+
 	// Filename extensions to consider as images
 	imageExtensions = []string{"jpg", "jpeg"}
 
 	// Directory name -> photos folder substitution CSV string; should
 	// be formatted as old1,new1,old2,new2, ... where new1 replaces old1 etc
 	nameSubstitutionTokens = ""
+
+	// Whether to capitalize words in directory name when forming
+	// folder names
+	capitalize = false
 
 	// Whether to skip (assume Yes) all confirmations)
 	skipConfirmation = false
@@ -287,6 +294,9 @@ func defaultAction(c *cli.Context) error {
 	log.Debugf("Using folder name substitution tokens: %v",
 		nameSubstitutionTokens)
 
+	capitalize = GlobalBoolT(c, "capitalize")
+	log.Debugf("Capitalizing folder name words: %v", capitalize)
+
 	mustProcessDir(baseDir, recursive, disregardJournal)
 
 	return nil
@@ -295,6 +305,9 @@ func defaultAction(c *cli.Context) error {
 func main() {
 	// Set up logging
 	setupLogging()
+
+	appConfig = readAppConfig()
+	log.Debugf("Read appConfig: %+v", appConfig)
 
 	appname := os.Args[0]
 	log.Debugf("main(): running %v..", appname)
@@ -337,6 +350,13 @@ func main() {
 				"new1 would replace token old1 etc. For example to replace " +
 				"all underscores with spaces and add spaces around " +
 				"all dashes, specify -s \"_, ,-, - \"",
+		},
+		cli.BoolTFlag{
+			Name: "capitalize, c",
+			Usage: "When forming the Photos Folder names, capitalize the " +
+				"first letter of each word, ie 'trip to tonga, 2018' " +
+				"would become 'Trip To Tonga, 2018'. Combine with " +
+				"folder-name-substitutions to clean up the directory names",
 		},
 		cli.StringFlag{
 			Name: "extensions, e",
