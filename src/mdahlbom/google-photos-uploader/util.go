@@ -74,6 +74,54 @@ func readAppConfig() *appConfiguration {
 	return cfg
 }
 
+// Write the app configuration file. Panics on failure.
+func mustWriteAppConfig(c *appConfiguration) {
+	appCfgFilePath := mustGetAppConfigPath()
+	log.Debugf("Using app config file path: %v", appCfgFilePath)
+
+	file, err := os.Create(appCfgFilePath)
+	if err != nil {
+		log.Fatalf("Failed to open app cfg file for writing: %v", err)
+	}
+
+	encoder := json.NewEncoder(file)
+	if err := encoder.Encode(c); err != nil {
+		log.Fatalf("Failed to write app cfg file: %v", err)
+	}
+}
+
+// Reads the app credentials (ClientID and ClientSecret) from stdin
+func mustReadAppCredentials() (string, string) {
+	appCfgFilePath := mustGetAppConfigPath()
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Printf("\nYou must enter the application credentials.\n\n"+
+		"Enter the ClientID and Client Secret for the app. To "+
+		"get these, go to https://console.developers.google.com/ and "+
+		"create a new project, navigate to Credentials and select "+
+		"Create credentials > OAuth client ID.\n\n"+
+		"The credentials will be stored in the app configuration file %v.\n\n",
+		appCfgFilePath)
+
+	clientID := ""
+	for clientID == "" {
+		fmt.Print("Enter the ClientID: ")
+		clientID, _ = reader.ReadString('\n')
+		clientID = strings.Trim(clientID, " \n")
+	}
+
+	clientSecret := ""
+	for clientSecret == "" {
+		fmt.Print("Enter the Client Secret: ")
+		clientSecret, _ = reader.ReadString('\n')
+		clientSecret = strings.Trim(clientSecret, " \n")
+	}
+
+	log.Debug("Read app credentials: %v, %v", clientID, clientSecret)
+
+	return clientID, clientSecret
+}
+
 // Asks the user interactively a confirmation question; if the user declines
 // (answers anything but Y or defalut - empty string - stop execution.
 func mustConfirm(format string, args ...interface{}) {

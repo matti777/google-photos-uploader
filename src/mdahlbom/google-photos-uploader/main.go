@@ -308,6 +308,11 @@ func main() {
 
 	appConfig = readAppConfig()
 	log.Debugf("Read appConfig: %+v", appConfig)
+	if appConfig.ClientID == "" || appConfig.ClientSecret == "" {
+		appConfig.ClientID, appConfig.ClientSecret = mustReadAppCredentials()
+		log.Debugf("Got appConfig from stdin: %+v", appConfig)
+		mustWriteAppConfig(appConfig)
+	}
 
 	appname := os.Args[0]
 	log.Debugf("main(): running %v..", appname)
