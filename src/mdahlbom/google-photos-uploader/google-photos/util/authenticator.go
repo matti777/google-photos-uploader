@@ -71,8 +71,6 @@ func NewAuthenticator(clientID, clientSecret,
 
 // HTTP handler for the Google's auth callbacks
 func (a *Authenticator) auth(w http.ResponseWriter, r *http.Request) {
-	log.Debugf("auth(): request: %+v", r)
-
 	// Get 'state' which is our self-generated nonce token
 	state := r.FormValue("state")
 

@@ -282,7 +282,6 @@ func defaultAction(c *cli.Context) error {
 	// Check if need to authenticate the user
 	if user != "" {
 		log.Debugf("Authenticating user '%v'..", user)
-		//TODO
 		a := util.NewAuthenticator(appConfig.ClientID,
 			appConfig.ClientSecret, user)
 		token, err := a.GetToken()
@@ -290,6 +289,7 @@ func defaultAction(c *cli.Context) error {
 			log.Fatalf("Failed to get authorization token")
 		} else {
 			log.Debugf("Got oauth2 token: %v", token)
+			fmt.Println("Authorization OK!")
 			appConfig.AuthToken = token
 			mustWriteAppConfig(appConfig)
 		}
