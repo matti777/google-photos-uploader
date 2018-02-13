@@ -250,13 +250,13 @@ func mustProcessDir(dir string, recurse, disregardJournal bool) {
 func defaultAction(c *cli.Context) error {
 	log.Debugf("Running Default action..")
 
-	user := c.String("user")
+	authorize := GlobalBoolT(c, "authorize")
 
 	// Make sure we have an auth token, ie. the user has performed the
 	// authorization flow.
-	if appConfig.AuthToken == nil && user == "" {
+	if appConfig.AuthToken == nil || appConfig.UserInfo == nil && !authorize {
 		fmt.Printf("Not authorized; you must perform the authorization " +
-			"flow. Run again and specify the --user (-u) flag.")
+			"flow. Run again and specify the --authorize flag.")
 		return fmt.Errorf("Missing authorization.")
 	}
 
@@ -280,20 +280,24 @@ func defaultAction(c *cli.Context) error {
 	log.Debugf("Cleaned baseDir: %v", baseDir)
 
 	// Check if need to authenticate the user
-	if user != "" {
-		log.Debugf("Authenticating user '%v'..", user)
+	if authorize {
+		log.Debugf("Running authorization flow..")
 		a := util.NewAuthenticator(appConfig.ClientID,
-			appConfig.ClientSecret, user)
-		token, err := a.GetToken()
+			appConfig.ClientSecret)
+		token, userInfo, err := a.Authorize()
 		if err != nil {
 			log.Fatalf("Failed to get authorization token")
 		} else {
 			log.Debugf("Got oauth2 token: %v", token)
 			fmt.Println("Authorization OK!")
 			appConfig.AuthToken = token
+			appConfig.UserInfo = userInfo
 			mustWriteAppConfig(appConfig)
 		}
 	}
+
+	fmt.Printf("Authorized as '%v' -- specify --authorize to authorize "+
+		"on a different account.\n", appConfig.UserInfo.Name)
 
 	disregardJournal := GlobalBoolT(c, "disregard-journal")
 	if disregardJournal {
@@ -358,13 +362,13 @@ func main() {
 	app.Version = "0.0.1-alpha"
 	app.Action = defaultAction
 	app.Flags = []cli.Flag{
-		cli.StringFlag{
-			Name: "user, u",
-			Usage: "Username for Google Photos; typically an email eg. " +
-				"you@gmail.com. You only have to specify this one time; " +
+		cli.BoolTFlag{
+			Name: "authorize",
+			Usage: "Trigger Google authorization flow. " +
+				"You only have to run this one time; " +
 				"after you have authenticated, the authentication token " +
 				"will be stored. If you want to authenticate with another " +
-				"username, simply define this flag again.",
+				"account, simply define this flag again.",
 		},
 		cli.BoolTFlag{
 			Name:  "disregard-journal, d",

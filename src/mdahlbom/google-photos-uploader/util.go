@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"mdahlbom/google-photos-uploader/google-photos/util"
+
 	logging "github.com/op/go-logging"
 	"github.com/urfave/cli"
 	"golang.org/x/oauth2"
@@ -21,6 +23,7 @@ type appConfiguration struct {
 	ClientID     string
 	ClientSecret string
 	AuthToken    *oauth2.Token
+	UserInfo     *util.UserInfo
 }
 
 const (

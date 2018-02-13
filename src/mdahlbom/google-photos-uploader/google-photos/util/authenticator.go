@@ -11,9 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	logging "github.com/op/go-logging"
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 )
 
 // Our authenticator type. Construct using NewAuthenticator().
@@ -21,15 +19,12 @@ import (
 // more info, see:
 // https://developers.google.com/actions/identity/oauth2-code-flow
 type Authenticator struct {
-	oauth2Config *oauth2.Config
+	oauth2Config oauth2.Config
 
 	stateToken string
 	ch         chan *oauth2.Token
 	errCh      chan error
 }
-
-// Our local logger
-var log = logging.MustGetLogger("google-photos-utils")
 
 // Opens a browser window to the specified URL
 func openBrowser(url string) error {
@@ -53,24 +48,24 @@ func openBrowser(url string) error {
 	return err
 }
 
-func NewAuthenticator(clientID, clientSecret,
-	username string) *Authenticator {
-
-	a := &Authenticator{oauth2Config: &oauth2.Config{
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		Scopes:       []string{"https://picasaweb.google.com/data/"},
-		Endpoint:     google.Endpoint,
-	},
+func NewAuthenticator(clientID, clientSecret string) *Authenticator {
+	return &Authenticator{oauth2Config: NewOAuth2Config(clientID, clientSecret),
 		ch:    make(chan *oauth2.Token),
 		errCh: make(chan error),
 	}
-
-	return a
 }
 
 // HTTP handler for the Google's auth callbacks
 func (a *Authenticator) auth(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		log.Errorf("Failed to parse form: %v", err)
+		a.errCh <- fmt.Errorf("Invalid request")
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	log.Debugf("Request form: %+v", r.Form)
+
 	// Get 'state' which is our self-generated nonce token
 	state := r.FormValue("state")
 
@@ -136,10 +131,10 @@ func (a *Authenticator) listenToHttp(pathNonce string) (string, error) {
 }
 
 // Synchronously waits for an access token.
-func (a *Authenticator) GetToken() (*oauth2.Token, error) {
+func (a *Authenticator) Authorize() (*oauth2.Token, *UserInfo, error) {
 	appname := os.Args[0]
 	fmt.Printf("%v needs to authorize to access Google Photos. "+
-		"Opening a browser to perform this step..", appname)
+		"Opening a browser to perform this step..\n\n", appname)
 
 	nonce := uuid.New().String()
 	log.Debugf("Allocated a path nonce: %v", nonce)
@@ -149,7 +144,7 @@ func (a *Authenticator) GetToken() (*oauth2.Token, error) {
 
 	addr, err := a.listenToHttp(nonce)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	a.oauth2Config.RedirectURL = fmt.Sprintf("http://%v/auth/%v",
@@ -164,7 +159,7 @@ func (a *Authenticator) GetToken() (*oauth2.Token, error) {
 		"manually in your favourite browser:\n\n%v\n\n", url)
 	if err := openBrowser(url); err != nil {
 		log.Errorf("Failed to open web browser: %v", err)
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Wait for the code on the channel; the HTTP handler will send it
@@ -172,27 +167,11 @@ func (a *Authenticator) GetToken() (*oauth2.Token, error) {
 	case token := <-a.ch:
 		log.Debugf("Got token: %v", token)
 		fmt.Println("Authorization OK.")
-		return token, nil
+
+		info, err := GetUserInfo(token)
+
+		return token, info, err
 	case err := <-a.errCh:
-		return nil, err
+		return nil, nil, err
 	}
-}
-
-// Configures the local logger
-func setupLogging() {
-	var format = logging.MustStringFormatter("%{color}%{time:15:04:05.000} " +
-		"%{shortfunc} ▶ %{level} " +
-		"%{color:reset} %{message}")
-	backend := logging.NewLogBackend(os.Stderr, "", 0)
-	formatter := logging.NewBackendFormatter(backend, format)
-	logging.SetBackend(formatter)
-	if enableDebugLogging {
-		logging.SetLevel(logging.DEBUG, "uploader")
-	} else {
-		logging.SetLevel(logging.INFO, "uploader")
-	}
-}
-
-func init() {
-	setupLogging()
 }
