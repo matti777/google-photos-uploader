@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	photos "mdahlbom/google-photos-uploader/google-photos"
 	"mdahlbom/google-photos-uploader/google-photos/util"
 	"mdahlbom/google-photos-uploader/pb"
 
@@ -40,6 +41,9 @@ var (
 
 	// Whether doing a 'dry run', ie not actually sending anything.
 	dryRun = false
+
+	// Google Photos API client
+	photosClient *photos.Client
 )
 
 func mustAddJournalEntry(dir string, name string, isDir bool,
@@ -298,6 +302,10 @@ func defaultAction(c *cli.Context) error {
 
 	fmt.Printf("Authorized as '%v' -- specify --authorize to authorize "+
 		"on a different account.\n", appConfig.UserInfo.Name)
+
+	// Create the API client
+	photosClient = photos.NewClient(appConfig.ClientID, appConfig.ClientSecret,
+		appConfig.AuthToken)
 
 	disregardJournal := GlobalBoolT(c, "disregard-journal")
 	if disregardJournal {
