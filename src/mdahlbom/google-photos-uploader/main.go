@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"mdahlbom/google-photos-uploader/google-photos/util"
 	"mdahlbom/google-photos-uploader/pb"
 
 	"github.com/golang/protobuf/ptypes"
@@ -268,6 +269,20 @@ func defaultAction(c *cli.Context) error {
 	}
 	log.Debugf("Cleaned baseDir: %v", baseDir)
 
+	// Check if need to authenticate the user
+	user := c.String("user")
+	if user != "" {
+		log.Debugf("Authenticating user '%v'..", user)
+		//TODO
+		a := util.NewAuthenticator(appConfig.ClientID,
+			appConfig.ClientSecret, user)
+		token, err := a.GetToken()
+		if err != nil {
+			log.Fatalf("Failed to get authorization token")
+		}
+		log.Debugf("Got oauth2 token: %v", token)
+	}
+
 	disregardJournal := GlobalBoolT(c, "disregard-journal")
 	if disregardJournal {
 		log.Debugf("Disregarding reading journal files..")
@@ -306,6 +321,9 @@ func main() {
 	// Set up logging
 	setupLogging()
 
+	appname := os.Args[0]
+	log.Debugf("main(): running %v..", appname)
+
 	appConfig = readAppConfig()
 	log.Debugf("Read appConfig: %+v", appConfig)
 	if appConfig.ClientID == "" || appConfig.ClientSecret == "" {
@@ -313,9 +331,6 @@ func main() {
 		log.Debugf("Got appConfig from stdin: %+v", appConfig)
 		mustWriteAppConfig(appConfig)
 	}
-
-	appname := os.Args[0]
-	log.Debugf("main(): running %v..", appname)
 
 	// Setup CLI app framework
 	app := cli.NewApp()
@@ -331,6 +346,14 @@ func main() {
 	app.Version = "0.0.1-alpha"
 	app.Action = defaultAction
 	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name: "user, u",
+			Usage: "Username for Google Photos; typically an email eg. " +
+				"you@gmail.com. You only have to specify this one time; " +
+				"after you have authenticated, the authentication token " +
+				"will be stored. If you want to authenticate with another " +
+				"username, simply define this flag again.",
+		},
 		cli.BoolTFlag{
 			Name:  "disregard-journal, d",
 			Usage: "Disregard reading journal files; re-upload everything",

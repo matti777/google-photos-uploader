@@ -13,6 +13,9 @@ go get -u github.com/op/go-logging
 go get -u github.com/urfave/cli
 go get -u github.com/golang/protobuf
 go get -u github.com/gosuri/uiprogress
+go get -u golang.org/x/oauth2
+go get -u github.com/google/uuid
+go get -u github.com/gorilla/mux
 ```
 
 ## Building the application
