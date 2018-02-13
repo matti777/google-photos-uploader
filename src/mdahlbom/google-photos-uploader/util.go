@@ -13,12 +13,14 @@ import (
 
 	logging "github.com/op/go-logging"
 	"github.com/urfave/cli"
+	"golang.org/x/oauth2"
 )
 
 // Application configuration file structure
 type appConfiguration struct {
 	ClientID     string
 	ClientSecret string
+	AuthToken    *oauth2.Token
 }
 
 const (

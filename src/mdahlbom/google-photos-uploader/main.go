@@ -250,6 +250,16 @@ func mustProcessDir(dir string, recurse, disregardJournal bool) {
 func defaultAction(c *cli.Context) error {
 	log.Debugf("Running Default action..")
 
+	user := c.String("user")
+
+	// Make sure we have an auth token, ie. the user has performed the
+	// authorization flow.
+	if appConfig.AuthToken == nil && user == "" {
+		fmt.Printf("Not authorized; you must perform the authorization " +
+			"flow. Run again and specify the --user (-u) flag.")
+		return fmt.Errorf("Missing authorization.")
+	}
+
 	baseDir := c.Args().Get(0)
 	if baseDir == "" {
 		log.Debugf("No base dir defined, using the CWD..")
@@ -270,7 +280,6 @@ func defaultAction(c *cli.Context) error {
 	log.Debugf("Cleaned baseDir: %v", baseDir)
 
 	// Check if need to authenticate the user
-	user := c.String("user")
 	if user != "" {
 		log.Debugf("Authenticating user '%v'..", user)
 		//TODO
@@ -279,8 +288,11 @@ func defaultAction(c *cli.Context) error {
 		token, err := a.GetToken()
 		if err != nil {
 			log.Fatalf("Failed to get authorization token")
+		} else {
+			log.Debugf("Got oauth2 token: %v", token)
+			appConfig.AuthToken = token
+			mustWriteAppConfig(appConfig)
 		}
-		log.Debugf("Got oauth2 token: %v", token)
 	}
 
 	disregardJournal := GlobalBoolT(c, "disregard-journal")

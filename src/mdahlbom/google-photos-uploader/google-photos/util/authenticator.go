@@ -23,8 +23,9 @@ import (
 type Authenticator struct {
 	oauth2Config *oauth2.Config
 
-	ch    chan *oauth2.Token
-	errCh chan error
+	stateToken string
+	ch         chan *oauth2.Token
+	errCh      chan error
 }
 
 // Our local logger
@@ -72,7 +73,39 @@ func NewAuthenticator(clientID, clientSecret,
 func (a *Authenticator) auth(w http.ResponseWriter, r *http.Request) {
 	log.Debugf("auth(): request: %+v", r)
 
-	//TODO
+	// Get 'state' which is our self-generated nonce token
+	state := r.FormValue("state")
+
+	// Get the authorization code
+	code := r.FormValue("code")
+
+	// Both values must be supplied
+	if state == "" || code == "" {
+		log.Errorf("Missing value(s) for state/code: %v/%v", state, code)
+		a.errCh <- fmt.Errorf("Missing request parameters")
+		http.Error(w, "missing values", http.StatusBadRequest)
+		return
+	}
+
+	// Make sure the state token matches
+	if state != a.stateToken {
+		log.Errorf("Invalid OAuth2 state received; expected '%s' "+
+			"but got '%s'", a.stateToken, state)
+		a.errCh <- fmt.Errorf("invalid OAuth2 state")
+		http.Error(w, "invalid state", http.StatusUnauthorized)
+		return
+	}
+
+	// Exchange the authorization code for an access token
+	token, err := a.oauth2Config.Exchange(oauth2.NoContext, code)
+	if err != nil {
+		a.errCh <- fmt.Errorf("Code exchange failed: %v", code)
+		http.Error(w, "Code exchange failed", http.StatusInternalServerError)
+		return
+	}
+
+	// Done; send the token for the waiting routine
+	a.ch <- token
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w,
@@ -91,7 +124,7 @@ func (a *Authenticator) listenToHttp(pathNonce string) (string, error) {
 
 	r := mux.NewRouter()
 	path := fmt.Sprintf("/auth/%v", pathNonce)
-	r.HandleFunc(path, a.auth).Methods("POST")
+	r.HandleFunc(path, a.auth).Methods("GET")
 
 	go func() {
 		log.Debugf("Starting HTTP serving..")
@@ -113,13 +146,13 @@ func (a *Authenticator) GetToken() (*oauth2.Token, error) {
 	nonce := uuid.New().String()
 	log.Debugf("Allocated a path nonce: %v", nonce)
 
+	a.stateToken = uuid.New().String()
+	log.Debugf("Allocated state token: %v", a.stateToken)
+
 	addr, err := a.listenToHttp(nonce)
 	if err != nil {
 		return nil, err
 	}
-
-	stateToken := uuid.New().String()
-	log.Debugf("Allocated state token: %v", stateToken)
 
 	a.oauth2Config.RedirectURL = fmt.Sprintf("http://%v/auth/%v",
 		addr, nonce)
@@ -127,7 +160,7 @@ func (a *Authenticator) GetToken() (*oauth2.Token, error) {
 
 	// Retrieve an URL where the user can authorize this app and open
 	// that URL in a browser
-	url := a.oauth2Config.AuthCodeURL(stateToken, oauth2.AccessTypeOffline)
+	url := a.oauth2Config.AuthCodeURL(a.stateToken, oauth2.AccessTypeOffline)
 
 	fmt.Printf("If the browser window fails to open, open the following URL "+
 		"manually in your favourite browser:\n\n%v\n\n", url)
