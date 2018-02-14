@@ -7,11 +7,9 @@ import (
 	"strings"
 	"time"
 
-	photos "mdahlbom/google-photos-uploader/google-photos"
-	"mdahlbom/google-photos-uploader/google-photos/util"
-	"mdahlbom/google-photos-uploader/pb"
+	photos "mdahlbom/google-photos-uploader/google_photos"
+	"mdahlbom/google-photos-uploader/google_photos/util"
 
-	"github.com/golang/protobuf/ptypes"
 	"github.com/gosuri/uiprogress"
 	"github.com/gosuri/uiprogress/util/strutil"
 	logging "github.com/op/go-logging"
@@ -45,45 +43,6 @@ var (
 	// Google Photos API client
 	photosClient *photos.Client
 )
-
-func mustAddJournalEntry(dir string, name string, isDir bool,
-	journal *pb.Journal, journalMap *map[string]*pb.JournalEntry) {
-
-	// Make sure there isnt already such an entry (sanity check)
-	for _, e := range journal.Entries {
-		if e.Name == name {
-			log.Fatalf("Already found journal entry '%v' in journal", name)
-		}
-	}
-	if (*journalMap)[name] != nil {
-		log.Fatalf("Already found journal map entry '%v' in journal", name)
-	}
-
-	entry := &pb.JournalEntry{Name: name, IsDirectory: isDir,
-		Completed: ptypes.TimestampNow()}
-
-	journal.Entries = append(journal.Entries, entry)
-	(*journalMap)[name] = entry
-
-	// Save the journal
-	mustWriteJournalFile(dir, journal)
-	log.Debugf("Added journal entry: %+v", entry)
-}
-
-// Creates a map of the journal's file name entries for faster access
-func newJournalMap(journal *pb.Journal) map[string]*pb.JournalEntry {
-	m := map[string]*pb.JournalEntry{}
-
-	if journal.Entries == nil {
-		return m
-	}
-
-	for _, e := range journal.Entries {
-		m[e.Name] = e
-	}
-
-	return m
-}
 
 // Simulates the upload of a file.
 func simulateUpload(progressBar *uiprogress.Bar, dir, dirName string,
@@ -132,123 +91,6 @@ func upload(dir, dirName string, file os.FileInfo,
 	defer progress.Stop()
 
 	return simulateUpload(bar, dir, dirName, file)
-}
-
-// Scans a directory for files and subdirectories; returns the lists of
-// unprocessed files and subdirectories. Panics on error.
-func mustScanDir(dir string, journal *pb.Journal,
-	journalMap map[string]*pb.JournalEntry) ([]os.FileInfo, []os.FileInfo) {
-
-	d, err := os.Open(dir)
-	if err != nil {
-		log.Fatalf("Failed to open directory '%v': %v", dir, err)
-	}
-
-	infos, err := d.Readdir(0)
-	if err != nil {
-		log.Fatalf("Failed to read directory '%v': %v", dir, err)
-	}
-
-	files := []os.FileInfo{}
-	dirs := []os.FileInfo{}
-
-	for _, info := range infos {
-		name := info.Name()
-		log.Debugf("Scan found name: %v", name)
-
-		if info.Mode()&os.ModeSymlink != 0 {
-			log.Debugf("Skipping symlink..")
-			continue
-		}
-
-		entry := journalMap[name]
-
-		if entry != nil {
-			log.Debugf("Already uploaded, skipping..")
-			continue
-		}
-
-		if info.IsDir() {
-			dirs = append(dirs, info)
-		} else {
-			ext := filepath.Ext(info.Name())
-			ext = strings.ToLower(strings.TrimLeft(ext, "."))
-			log.Debugf("File ext is: %v", ext)
-
-			for _, e := range imageExtensions {
-				if ext == e {
-					log.Debugf("Ext matches %v - is image", e)
-					files = append(files, info)
-					break
-				}
-			}
-		}
-	}
-
-	return files, dirs
-}
-
-// Processes all the entries in a single directory. Aborts as soon as
-// an upload fails.
-func mustProcessDir(dir string, recurse, disregardJournal bool) {
-	// Check that the diretory exists
-	if exists, _ := directoryExists(dir); !exists {
-		log.Fatalf("Directory '%v' does not exist!", dir)
-	}
-
-	dirName := filepath.Base(dir)
-	folderName, err := replaceInString(dirName, nameSubstitutionTokens)
-	if err != nil {
-		log.Fatalf("Invalid replacement pattern: %v", nameSubstitutionTokens)
-	}
-
-	mustConfirm("About to upload directory '%v' as folder '%v' - continue?",
-		dirName, folderName)
-
-	log.Debugf("Processing directory %v ..", dir)
-
-	journal := &pb.Journal{}
-
-	if !disregardJournal {
-		// Read the journal file of the directory
-		j, err := readJournalFile(dir)
-		if err != nil {
-			log.Fatalf("Error reading Journal file: %v", err)
-		} else if j != nil {
-			journal = j
-		}
-	}
-
-	log.Debugf("Read journal file: %+v", journal)
-
-	// Create a lookup map for faster access
-	journalMap := newJournalMap(journal)
-
-	files, dirs := mustScanDir(dir, journal, journalMap)
-	padLength := findLongestName(files)
-
-	// Process the files in this directory firs
-	for _, f := range files {
-		if err := upload(dir, dirName, f, padLength); err != nil {
-			log.Fatalf("File upload failed: %v", err)
-		} else {
-			// Uploaded file successfully
-			mustAddJournalEntry(dir, f.Name(), false, journal, &journalMap)
-		}
-	}
-
-	// Then (possibly recursively) process the subdirectories
-	for _, d := range dirs {
-		if recurse {
-			subDir := filepath.Join(dir, d.Name())
-			mustProcessDir(subDir, recurse, disregardJournal)
-			mustAddJournalEntry(dir, d.Name(), true, journal, &journalMap)
-		} else {
-			log.Debugf("Non-recursive; skipping directory: %v", d.Name())
-		}
-	}
-
-	log.Debugf("Directory '%v' uploaded OK.", dirName)
 }
 
 func defaultAction(c *cli.Context) error {

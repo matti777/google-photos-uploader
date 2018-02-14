@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mdahlbom/google-photos-uploader/google-photos/util"
+	"mdahlbom/google-photos-uploader/google_photos/util"
 
 	logging "github.com/op/go-logging"
 	"github.com/urfave/cli"
