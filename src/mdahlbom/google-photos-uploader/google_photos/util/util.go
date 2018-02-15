@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 
-	logging "github.com/op/go-logging"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
@@ -26,8 +24,8 @@ type UserInfo struct {
 	LastName  string `json:"family_name"`
 }
 
-// Our local logger
-var log = logging.MustGetLogger("google-photos-utils")
+// Set this variable to enable error logging output from the library
+var ErrorLogFunc func(string, ...interface{}) = nil
 
 func NewOAuth2Config(clientID, clientSecret string) oauth2.Config {
 	return oauth2.Config{
@@ -46,7 +44,7 @@ func GetUserInfo(token *oauth2.Token) (*UserInfo, error) {
 	// Retrieve user info
 	r, err := http.Get(fmt.Sprintf(userInfoEndpointUrlFmt, token.AccessToken))
 	if err != nil {
-		log.Errorf("Error fetching user information: %v", err)
+		ErrorLogFunc("Error fetching user information: %v", err)
 		return nil, err
 	}
 
@@ -54,36 +52,17 @@ func GetUserInfo(token *oauth2.Token) (*UserInfo, error) {
 
 	contents, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Errorf("Failed to read response body: %v", err)
+		ErrorLogFunc("Failed to read response body: %v", err)
 		return nil, err
 	}
 
 	info := new(UserInfo)
 	if err := json.Unmarshal(contents, info); err != nil {
-		log.Errorf("Failed to unmarshal JSON: %v", err)
+		ErrorLogFunc("Failed to unmarshal JSON: %v", err)
 		return nil, err
 	}
 
-	log.Debugf("Got UserInfo: %+v", info)
+	ErrorLogFunc("Got UserInfo: %+v", info)
 
 	return info, nil
-}
-
-// Configures the local logger
-func setupLogging() {
-	var format = logging.MustStringFormatter("%{color}%{time:15:04:05.000} " +
-		"%{shortfunc} ▶ %{level} " +
-		"%{color:reset} %{message}")
-	backend := logging.NewLogBackend(os.Stderr, "", 0)
-	formatter := logging.NewBackendFormatter(backend, format)
-	logging.SetBackend(formatter)
-	if enableDebugLogging {
-		logging.SetLevel(logging.DEBUG, "uploader")
-	} else {
-		logging.SetLevel(logging.INFO, "uploader")
-	}
-}
-
-func init() {
-	setupLogging()
 }

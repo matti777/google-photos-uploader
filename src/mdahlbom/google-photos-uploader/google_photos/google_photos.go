@@ -12,6 +12,9 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// Set this variable to enable error logging output from the library
+var ErrorLogFunc func(string, ...interface{}) = nil
+
 // Our API client type. Create with NewClient().
 type Client struct {
 	httpClient *http.Client
@@ -28,8 +31,6 @@ func NewClient(clientID, clientSecret string, token *oauth2.Token) *Client {
 
 // Lists all the Albums
 func (c *Client) ListAlbums() (*Feed, error) {
-	log.Debugf("Fetching list of Photos Albums..")
-
 	url := "https://picasaweb.google.com/data/feed/api/user/default"
 	return c.fetchFeed(url)
 }
@@ -38,7 +39,7 @@ func (c *Client) ListAlbums() (*Feed, error) {
 func (c *Client) fetchFeed(endpoint string) (*Feed, error) {
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
-		log.Errorf("Failed to create HTTP request: %v", err)
+		ErrorLogFunc("Failed to create HTTP request: %v", err)
 		return nil, err
 	}
 
@@ -46,26 +47,26 @@ func (c *Client) fetchFeed(endpoint string) (*Feed, error) {
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
-		log.Errorf("Failed to fetch the feed: %v", err)
+		ErrorLogFunc("Failed to fetch the feed: %v", err)
 		return nil, err
 	}
 
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		log.Errorf("Got non-OK response code: %v", res.StatusCode)
+		ErrorLogFunc("Got non-OK response code: %v", res.StatusCode)
 		return nil, errors.New(res.Status)
 	}
 
 	contents, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		log.Errorf("Failed to read response body: %v", err)
+		ErrorLogFunc("Failed to read response body: %v", err)
 		return nil, err
 	}
 
 	feed := new(Feed)
 	if err := xml.Unmarshal(contents, feed); err != nil {
-		log.Errorf("Failed to unmarshal XML: %v", err)
+		ErrorLogFunc("Failed to unmarshal XML: %v", err)
 		return nil, err
 	}
 

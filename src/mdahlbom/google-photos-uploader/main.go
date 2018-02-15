@@ -159,6 +159,7 @@ func defaultAction(c *cli.Context) error {
 		appConfig.AuthToken)
 
 	// Retrieve the list of albums
+	log.Debugf("Fetching list of Photos Albums..")
 	if f, err := photosClient.ListAlbums(); err != nil {
 		log.Fatalf("Failed to list Google Photos albums: %v", err)
 	} else {
