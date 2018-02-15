@@ -28,6 +28,8 @@ func NewClient(clientID, clientSecret string, token *oauth2.Token) *Client {
 
 // Lists all the Albums
 func (c *Client) ListAlbums() (*Feed, error) {
+	log.Debugf("Fetching list of Photos Albums..")
+
 	url := "https://picasaweb.google.com/data/feed/api/user/default"
 	return c.fetchFeed(url)
 }

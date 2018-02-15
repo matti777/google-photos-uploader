@@ -80,9 +80,37 @@ func mustScanDir(dir string, journal *pb.Journal,
 	return files, dirs
 }
 
+func uploadAll(dir, dirName string, journal *pb.Journal,
+	journalMap map[string]*pb.JournalEntry, files, dirs []os.FileInfo) {
+
+	// Calculate the common padding length from the longest filename
+	padLength := findLongestName(files)
+
+	// Process the files in this directory firs
+	for _, f := range files {
+		if err := upload(dir, dirName, f, padLength); err != nil {
+			log.Fatalf("File upload failed: %v", err)
+		} else {
+			// Uploaded file successfully
+			mustAddJournalEntry(dir, f.Name(), false, journal, &journalMap)
+		}
+	}
+
+	// Then (possibly recursively) process the subdirectories
+	for _, d := range dirs {
+		if recurse {
+			subDir := filepath.Join(dir, d.Name())
+			mustProcessDir(subDir)
+			mustAddJournalEntry(dir, d.Name(), true, journal, &journalMap)
+		} else {
+			log.Debugf("Non-recursive; skipping directory: %v", d.Name())
+		}
+	}
+}
+
 // Processes all the entries in a single directory. Aborts as soon as
 // an upload fails.
-func mustProcessDir(dir string, recurse, disregardJournal bool) {
+func mustProcessDir(dir string) {
 	// Check that the diretory exists
 	if exists, _ := directoryExists(dir); !exists {
 		log.Fatalf("Directory '%v' does not exist!", dir)
@@ -116,29 +144,9 @@ func mustProcessDir(dir string, recurse, disregardJournal bool) {
 	// Create a lookup map for faster access
 	journalMap := newJournalMap(journal)
 
+	// Find all the files & subdirectories and upload them
 	files, dirs := mustScanDir(dir, journal, journalMap)
-	padLength := findLongestName(files)
-
-	// Process the files in this directory firs
-	for _, f := range files {
-		if err := upload(dir, dirName, f, padLength); err != nil {
-			log.Fatalf("File upload failed: %v", err)
-		} else {
-			// Uploaded file successfully
-			mustAddJournalEntry(dir, f.Name(), false, journal, &journalMap)
-		}
-	}
-
-	// Then (possibly recursively) process the subdirectories
-	for _, d := range dirs {
-		if recurse {
-			subDir := filepath.Join(dir, d.Name())
-			mustProcessDir(subDir, recurse, disregardJournal)
-			mustAddJournalEntry(dir, d.Name(), true, journal, &journalMap)
-		} else {
-			log.Debugf("Non-recursive; skipping directory: %v", d.Name())
-		}
-	}
+	uploadAll(dir, dirName, journal, journalMap, files, dirs)
 
 	log.Debugf("Directory '%v' uploaded OK.", dirName)
 }

@@ -11,3 +11,19 @@ type FeedEntry struct {
 	AlbumID string `xml:"albumid"`
 	Title   string `xml:"title"`
 }
+
+// Returns the number of entries in the feed
+func (f *Feed) Count() int {
+	return len(f.Entries)
+}
+
+// Retrieves a feed entry by it Title. Returns nil if not found
+func (f *Feed) EntryByTitle(title string) *FeedEntry {
+	for _, e := range f.Entries {
+		if e.Title == title {
+			return &e
+		}
+	}
+
+	return nil
+}

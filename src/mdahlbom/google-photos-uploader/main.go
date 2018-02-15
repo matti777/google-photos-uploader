@@ -40,8 +40,17 @@ var (
 	// Whether doing a 'dry run', ie not actually sending anything.
 	dryRun = false
 
+	// Whether to skip reading journal files
+	disregardJournal = false
+
+	// Whether to recurse into subdirectories
+	recurse = false
+
 	// Google Photos API client
 	photosClient *photos.Client
+
+	// Feed representing the list of Albums
+	albumFeed *photos.Feed
 )
 
 // Simulates the upload of a file.
@@ -149,13 +158,26 @@ func defaultAction(c *cli.Context) error {
 	photosClient = photos.NewClient(appConfig.ClientID, appConfig.ClientSecret,
 		appConfig.AuthToken)
 
-	disregardJournal := GlobalBoolT(c, "disregard-journal")
+	// Retrieve the list of albums
+	if f, err := photosClient.ListAlbums(); err != nil {
+		log.Fatalf("Failed to list Google Photos albums: %v", err)
+	} else {
+		log.Debugf("Got album feed: %v", f)
+		albumFeed = f
+
+		//TODO remove
+		for _, e := range f.Entries {
+			log.Debugf("Album Title: '%v'", e.Title)
+		}
+	}
+
+	disregardJournal = GlobalBoolT(c, "disregard-journal")
 	if disregardJournal {
 		log.Debugf("Disregarding reading journal files..")
 	}
 
-	recursive := GlobalBoolT(c, "recursive")
-	log.Debugf("Recurse into subdirectories: %v", recursive)
+	recurse = GlobalBoolT(c, "recursive")
+	log.Debugf("Recurse into subdirectories: %v", recurse)
 
 	skipConfirmation = GlobalBoolT(c, "yes")
 	dryRun = GlobalBoolT(c, "dry-run")
@@ -178,7 +200,7 @@ func defaultAction(c *cli.Context) error {
 	capitalize = GlobalBoolT(c, "capitalize")
 	log.Debugf("Capitalizing folder name words: %v", capitalize)
 
-	mustProcessDir(baseDir, recursive, disregardJournal)
+	mustProcessDir(baseDir)
 
 	return nil
 }
