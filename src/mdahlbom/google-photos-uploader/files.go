@@ -3,11 +3,14 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	photos "mdahlbom/google-photos-uploader/google_photos"
 	"mdahlbom/google-photos-uploader/pb"
+	//"github.com/golang/protobuf/ptypes"
 )
 
 // Checks that a path is an existing directory
@@ -80,19 +83,76 @@ func mustScanDir(dir string, journal *pb.Journal,
 	return files, dirs
 }
 
+func getAlbum(dirName string) *photos.FeedEntry {
+
+	//mustUpload := false
+
+	/*
+		if album.AlbumId == "" {
+			// Check if there are files to upload; if so, must create an album
+			for _, e := range journal.Entries {
+				completed, err := ptypes.Timestamp(e.Completed)
+				if err != nil {
+					log.Fatalf("Failed to convert timestamp: %v", err)
+				}
+
+				if !e.IsDirectory && completed.IsZero() {
+					// Found file that's not been uploaded; we must upload it.
+					mustUpload = true
+					break
+				}
+			}
+		}
+	*/
+
+	//	if mustUpload {
+	albumName, err := replaceInString(dirName, nameSubstitutionTokens)
+	if err != nil {
+		log.Fatalf("Failed to replace in string: %v", err)
+	}
+
+	if capitalize {
+		albumName = strings.Title(albumName)
+	}
+	albumName = strings.Trim(albumName, " \n\r")
+
+	log.Debugf("Looking for album with title '%v'", albumName)
+
+	// We will need to have an existing album to upload to.
+	// See if it exists
+	for _, e := range albumFeed.Entries {
+		if e.Title == albumName {
+			log.Debugf("Found album '%v'", e.Title)
+			return &e
+		}
+	}
+
+	fmt.Printf("Missing album: %v", albumName)
+	//	}
+
+	return nil
+}
+
 func uploadAll(dir, dirName string, journal *pb.Journal,
 	journalMap map[string]*pb.JournalEntry, files, dirs []os.FileInfo) {
 
-	// Calculate the common padding length from the longest filename
-	padLength := findLongestName(files)
+	album := getAlbum(dirName)
 
-	// Process the files in this directory firs
-	for _, f := range files {
-		if err := upload(dir, dirName, f, padLength); err != nil {
-			log.Fatalf("File upload failed: %v", err)
-		} else {
-			// Uploaded file successfully
-			mustAddJournalEntry(dir, f.Name(), false, journal, &journalMap)
+	// Only process files in this directory if there is something left to do
+	// and the album already exists
+	if album != nil {
+		// Calculate the common padding length from the longest filename
+		padLength := findLongestName(files)
+
+		// Process the files in this directory firs
+		for _, f := range files {
+			if err := upload(dir, dirName, f, padLength); err != nil {
+				log.Fatalf("File upload failed: %v", err)
+			} else {
+				// Uploaded file successfully
+				//mustAddJournalEntry(dir, f.Name(), false, journal, &journalMap)
+				mustAddJournalEntry(dir, f.Name(), journal, &journalMap)
+			}
 		}
 	}
 
@@ -101,7 +161,7 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 		if recurse {
 			subDir := filepath.Join(dir, d.Name())
 			mustProcessDir(subDir)
-			mustAddJournalEntry(dir, d.Name(), true, journal, &journalMap)
+			//mustAddJournalEntry(dir, d.Name(), true, journal, &journalMap)
 		} else {
 			log.Debugf("Non-recursive; skipping directory: %v", d.Name())
 		}

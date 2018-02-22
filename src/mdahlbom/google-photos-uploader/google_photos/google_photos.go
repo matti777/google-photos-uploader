@@ -4,6 +4,7 @@ package google_photos
 import (
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 
@@ -35,6 +36,18 @@ func (c *Client) ListAlbums() (*Feed, error) {
 	return c.fetchFeed(url)
 }
 
+// Upload a photo to an album synchronously.
+func (c *Client) UploadPhoto(name string, data []byte, album *FeedEntry) error {
+	url := fmt.Sprintf("https://picasaweb.google.com/data/feed/api/user/"+
+		"default/albumid/%v", album.AlbumID)
+
+	ErrorLogFunc("Using upload url: %v", url)
+
+	//TODO
+
+	return nil
+}
+
 // Returns a Feed for the given resource (endpoint URL)
 func (c *Client) fetchFeed(endpoint string) (*Feed, error) {
 	req, err := http.NewRequest("GET", endpoint, nil)
@@ -43,7 +56,7 @@ func (c *Client) fetchFeed(endpoint string) (*Feed, error) {
 		return nil, err
 	}
 
-	req.Header.Set("GData-Version", "2")
+	req.Header.Set("GData-Version", "3")
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {

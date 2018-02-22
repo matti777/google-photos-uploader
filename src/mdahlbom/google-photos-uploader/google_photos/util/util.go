@@ -2,10 +2,14 @@
 package util
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -25,7 +29,7 @@ type UserInfo struct {
 }
 
 // Set this variable to enable error logging output from the library
-var ErrorLogFunc func(string, ...interface{}) = nil
+var ErrorLogFunc func(string, ...interface{}) = func(string, ...interface{}) {}
 
 func NewOAuth2Config(clientID, clientSecret string) oauth2.Config {
 	return oauth2.Config{
@@ -65,4 +69,48 @@ func GetUserInfo(token *oauth2.Token) (*UserInfo, error) {
 	ErrorLogFunc("Got UserInfo: %+v", info)
 
 	return info, nil
+}
+
+// Creates a file upload request
+func NewImageUploadRequest(uri, mimeType string,
+	data []byte) (*http.Request, error) {
+
+	// Allocate a buffer for storing the multipart body
+	bodyReader := bytes.NewReader(data)
+
+	req, err := http.NewRequest("POST", uri, bodyReader)
+	if err != nil {
+		ErrorLogFunc("Failed to create HTTP request: %v", err)
+		return nil, err
+	}
+
+	if mimeType != "" {
+		req.Header.Set("Content-Type", mimeType)
+	}
+
+	return req, nil
+}
+
+// Creates a file upload request
+func NewImageUploadRequestFromFile(uri string,
+	path string) (*http.Request, error) {
+
+	f, err := os.Open(path)
+	if err != nil {
+		ErrorLogFunc("Failed to open file: %v", err)
+		return nil, err
+	}
+	defer f.Close()
+
+	data, err := ioutil.ReadAll(f)
+	if err != nil {
+		ErrorLogFunc("Failed to read file: %v", err)
+		return nil, err
+	}
+
+	// Decide the MIME type by the file extension
+	ext := filepath.Ext(path)
+	mimeType := mime.TypeByExtension(ext)
+
+	return NewImageUploadRequest(uri, mimeType, data)
 }

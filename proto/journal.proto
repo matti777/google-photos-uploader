@@ -6,6 +6,7 @@ option go_package = "mdahlbom/google-photos-uploader/pb";
 import "google/protobuf/timestamp.proto";
 
 message Journal {
+    // List of files / subdirectories
     repeated JournalEntry entries = 1;
 }
 
@@ -13,10 +14,10 @@ message JournalEntry {
     // Name (relative) of the file or directory
     string name = 1;
 
-    // Whether the entry is a directory
-    bool is_directory = 2;
+    // // Whether the entry is a directory
+    // bool is_directory = 2;
 
-    // When the entry was completed (uploaded)
-    google.protobuf.Timestamp completed = 3;
+    // // When the entry was completed (uploaded)
+    // google.protobuf.Timestamp completed = 3;
 }
 

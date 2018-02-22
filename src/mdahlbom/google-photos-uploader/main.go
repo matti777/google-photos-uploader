@@ -159,7 +159,7 @@ func defaultAction(c *cli.Context) error {
 		appConfig.AuthToken)
 
 	// Retrieve the list of albums
-	log.Debugf("Fetching list of Photos Albums..")
+	fmt.Printf("Fetching the list of Photos Albums..\n")
 	if f, err := photosClient.ListAlbums(); err != nil {
 		log.Fatalf("Failed to list Google Photos albums: %v", err)
 	} else {
@@ -168,7 +168,7 @@ func defaultAction(c *cli.Context) error {
 
 		//TODO remove
 		for _, e := range f.Entries {
-			log.Debugf("Album Title: '%v'", e.Title)
+			log.Debugf("Album Title: '%v', ID: %v", e.Title, e.AlbumID)
 		}
 	}
 

@@ -59,7 +59,7 @@ func readJournalFile(dir string) (*pb.Journal, error) {
 
 // Adds a journal entry and persists the directory's journal entry to disk.
 // Panics on failure.
-func mustAddJournalEntry(dir string, name string, isDir bool,
+func mustAddJournalEntry(dir string, name string, /*isDir bool,*/
 	journal *pb.Journal, journalMap *map[string]*pb.JournalEntry) {
 
 	// Make sure there isnt already such an entry (sanity check)
@@ -72,7 +72,7 @@ func mustAddJournalEntry(dir string, name string, isDir bool,
 		log.Fatalf("Already found journal map entry '%v' in journal", name)
 	}
 
-	entry := &pb.JournalEntry{Name: name, IsDirectory: isDir,
+	entry := &pb.JournalEntry{Name: name, /*IsDirectory: isDir,*/
 		Completed: ptypes.TimestampNow()}
 
 	journal.Entries = append(journal.Entries, entry)
