@@ -2,9 +2,9 @@
 package util
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"mime"
 	"net/http"
@@ -73,12 +73,9 @@ func GetUserInfo(token *oauth2.Token) (*UserInfo, error) {
 
 // Creates a file upload request
 func NewImageUploadRequest(uri, mimeType string,
-	data []byte) (*http.Request, error) {
+	reader io.Reader) (*http.Request, error) {
 
-	// Allocate a buffer for storing the multipart body
-	bodyReader := bytes.NewReader(data)
-
-	req, err := http.NewRequest("POST", uri, bodyReader)
+	req, err := http.NewRequest("POST", uri, reader)
 	if err != nil {
 		ErrorLogFunc("Failed to create HTTP request: %v", err)
 		return nil, err
@@ -100,17 +97,10 @@ func NewImageUploadRequestFromFile(uri string,
 		ErrorLogFunc("Failed to open file: %v", err)
 		return nil, err
 	}
-	defer f.Close()
-
-	data, err := ioutil.ReadAll(f)
-	if err != nil {
-		ErrorLogFunc("Failed to read file: %v", err)
-		return nil, err
-	}
 
 	// Decide the MIME type by the file extension
 	ext := filepath.Ext(path)
 	mimeType := mime.TypeByExtension(ext)
 
-	return NewImageUploadRequest(uri, mimeType, data)
+	return NewImageUploadRequest(uri, mimeType, f)
 }

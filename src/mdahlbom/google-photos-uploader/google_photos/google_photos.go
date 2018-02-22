@@ -37,13 +37,27 @@ func (c *Client) ListAlbums() (*Feed, error) {
 }
 
 // Upload a photo to an album synchronously.
-func (c *Client) UploadPhoto(name string, data []byte, album *FeedEntry) error {
+func (c *Client) UploadPhoto(path string, album *FeedEntry) error {
 	url := fmt.Sprintf("https://picasaweb.google.com/data/feed/api/user/"+
 		"default/albumid/%v", album.AlbumID)
 
 	ErrorLogFunc("Using upload url: %v", url)
 
-	//TODO
+	req, err := util.NewImageUploadRequestFromFile(url, path)
+	if err != nil {
+		return err
+	}
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		ErrorLogFunc("Failed to POST new image: %v", err)
+		return err
+	}
+
+	if res.StatusCode != 200 {
+		ErrorLogFunc("Got status code: %v", res.StatusCode)
+		return fmt.Errorf("Photo upload failed: %v", res.Status)
+	}
 
 	return nil
 }
