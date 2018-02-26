@@ -36,14 +36,17 @@ func (c *Client) ListAlbums() (*Feed, error) {
 	return c.fetchFeed(url)
 }
 
-// Upload a photo to an album synchronously.
-func (c *Client) UploadPhoto(path string, album *FeedEntry) error {
+// Upload a photo to an album synchronously. If callback parameter is specified,
+// it will get called when data has been submitted.
+func (c *Client) UploadPhoto(path string, album *FeedEntry,
+	callback func(int64)) error {
+
 	url := fmt.Sprintf("https://picasaweb.google.com/data/feed/api/user/"+
 		"default/albumid/%v", album.AlbumID)
 
 	ErrorLogFunc("Using upload url: %v", url)
 
-	req, err := util.NewImageUploadRequestFromFile(url, path)
+	req, err := util.NewImageUploadRequestFromFile(url, path, callback)
 	if err != nil {
 		return err
 	}

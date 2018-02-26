@@ -5,13 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	photos "mdahlbom/google-photos-uploader/google_photos"
 	"mdahlbom/google-photos-uploader/google_photos/util"
 
-	"github.com/gosuri/uiprogress"
-	"github.com/gosuri/uiprogress/util/strutil"
 	logging "github.com/op/go-logging"
 	"github.com/urfave/cli"
 )
@@ -52,55 +49,6 @@ var (
 	// Feed representing the list of Albums
 	albumFeed *photos.Feed
 )
-
-// Simulates the upload of a file.
-func simulateUpload(progressBar *uiprogress.Bar, dir, dirName string,
-	file os.FileInfo) error {
-
-	const steps = 5
-
-	remaining := file.Size()
-	sent := int64(0)
-	perStep := remaining / steps
-
-	for i := 0; i < steps; i++ {
-		time.Sleep(time.Millisecond * 250)
-
-		if remaining < perStep {
-			sent += remaining
-		} else {
-			sent += perStep
-		}
-
-		progressBar.Set(int(sent))
-
-		remaining -= perStep
-	}
-
-	return nil
-}
-
-func upload(dir, dirName string, file os.FileInfo,
-	padLength int) error {
-
-	log.Debugf("Uploading '%v' for dirName '%v'", file.Name(), dirName)
-
-	paddedName := strutil.PadRight(file.Name(), padLength, ' ')
-
-	progress := uiprogress.New()
-	bar := progress.AddBar(int(file.Size())).PrependElapsed().AppendCompleted()
-	bar.PrependFunc(func(b *uiprogress.Bar) string {
-		return paddedName
-	})
-	bar.Fill = '#'
-	bar.Head = '#'
-	bar.Empty = ' '
-
-	progress.Start()
-	defer progress.Stop()
-
-	return simulateUpload(bar, dir, dirName, file)
-}
 
 func defaultAction(c *cli.Context) error {
 	log.Debugf("Running Default action..")
@@ -181,7 +129,11 @@ func defaultAction(c *cli.Context) error {
 	log.Debugf("Recurse into subdirectories: %v", recurse)
 
 	skipConfirmation = GlobalBoolT(c, "yes")
+
 	dryRun = GlobalBoolT(c, "dry-run")
+	if dryRun {
+		fmt.Printf("--dry-run enabled, not uploading anything\n")
+	}
 
 	exts := c.String("extensions")
 	if exts != "" {
@@ -256,7 +208,7 @@ func main() {
 			Usage: "Answer Yes to all confirmations",
 		},
 		cli.BoolTFlag{
-			Name:  "dry-run",
+			Name:  "dry-run, n",
 			Usage: "Specify to just scan, not actually upload anything",
 		},
 		cli.StringFlag{

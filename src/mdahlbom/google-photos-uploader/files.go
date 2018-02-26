@@ -7,6 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/gosuri/uiprogress"
+	"github.com/gosuri/uiprogress/util/strutil"
 
 	photos "mdahlbom/google-photos-uploader/google_photos"
 	"mdahlbom/google-photos-uploader/pb"
@@ -133,6 +137,69 @@ func getAlbum(dirName string) *photos.FeedEntry {
 	return nil
 }
 
+// Simulates the upload of a file.
+func simulateUploadPhoto(path string, size int64, album *photos.FeedEntry,
+	callback func(int64)) error {
+
+	log.Debugf("Simulating uploading file: %v", path)
+
+	const steps = 10
+	const duration = 2.0
+	const sleep = float32(time.Second) * (float32(duration) / steps)
+
+	remaining := size
+	sent := int64(0)
+	perStep := remaining / steps
+
+	for i := 0; i < steps; i++ {
+		time.Sleep(time.Duration(sleep))
+
+		if remaining < perStep {
+			sent += remaining
+		} else {
+			sent += perStep
+		}
+
+		callback(sent)
+
+		remaining -= perStep
+	}
+
+	return nil
+}
+
+func upload(dir string, file os.FileInfo,
+	padLength int, album *photos.FeedEntry) error {
+
+	paddedName := strutil.PadRight(file.Name(), padLength, ' ')
+
+	progress := uiprogress.New()
+	bar := progress.AddBar(int(file.Size())).PrependElapsed().AppendCompleted()
+	bar.PrependFunc(func(b *uiprogress.Bar) string {
+		return paddedName
+	})
+	bar.Fill = '#'
+	bar.Head = '#'
+	bar.Empty = ' '
+
+	progress.Start()
+	defer progress.Stop()
+
+	filePath := filepath.Join(dir, file.Name())
+
+	progressCallback := func(count int64) {
+		bar.Set(int(count))
+	}
+
+	if dryRun {
+		return simulateUploadPhoto(filePath, file.Size(),
+			album, progressCallback)
+	} else {
+		log.Debugf("Uploading file: %v", filePath)
+		return photosClient.UploadPhoto(filePath, album, progressCallback)
+	}
+}
+
 func uploadAll(dir, dirName string, journal *pb.Journal,
 	journalMap map[string]*pb.JournalEntry, files, dirs []os.FileInfo) {
 
@@ -146,7 +213,7 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 
 		// Process the files in this directory firs
 		for _, f := range files {
-			if err := upload(dir, dirName, f, padLength); err != nil {
+			if err := upload(dir, f, padLength, album); err != nil {
 				log.Fatalf("File upload failed: %v", err)
 			} else {
 				// Uploaded file successfully

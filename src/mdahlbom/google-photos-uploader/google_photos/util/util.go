@@ -31,6 +31,24 @@ type UserInfo struct {
 // Set this variable to enable error logging output from the library
 var ErrorLogFunc func(string, ...interface{}) = func(string, ...interface{}) {}
 
+// Wraps io.Reader (and io.Closer) so that it counts the bytes read.
+type sizeCountingReader struct {
+	io.Reader
+	io.Closer
+
+	callback func(count int64)
+	count    int64
+}
+
+func (r sizeCountingReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+
+	r.count += int64(n)
+	r.callback(r.count)
+
+	return n, err
+}
+
 func NewOAuth2Config(clientID, clientSecret string) oauth2.Config {
 	return oauth2.Config{
 		ClientID:     clientID,
@@ -71,9 +89,17 @@ func GetUserInfo(token *oauth2.Token) (*UserInfo, error) {
 	return info, nil
 }
 
-// Creates a file upload request
+// Creates a file upload request. If callback parameter is specified,
+// it will get called when data has been read (and thus submitted) from the
+// reader.
 func NewImageUploadRequest(uri, mimeType string,
-	reader io.Reader) (*http.Request, error) {
+	reader io.Reader, callback func(int64)) (*http.Request, error) {
+
+	if callback != nil {
+		// Wrap the reader into one supporting progress callbacks
+		reader = sizeCountingReader{Reader: reader,
+			callback: callback, count: 0}
+	}
 
 	req, err := http.NewRequest("POST", uri, reader)
 	if err != nil {
@@ -88,9 +114,11 @@ func NewImageUploadRequest(uri, mimeType string,
 	return req, nil
 }
 
-// Creates a file upload request
+// Creates a file upload request. If callback parameter is specified,
+// it will get called when data has been read (and thus submitted) from the
+// reader.
 func NewImageUploadRequestFromFile(uri string,
-	path string) (*http.Request, error) {
+	path string, callback func(int64)) (*http.Request, error) {
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -102,5 +130,5 @@ func NewImageUploadRequestFromFile(uri string,
 	ext := filepath.Ext(path)
 	mimeType := mime.TypeByExtension(ext)
 
-	return NewImageUploadRequest(uri, mimeType, f)
+	return NewImageUploadRequest(uri, mimeType, f, callback)
 }
