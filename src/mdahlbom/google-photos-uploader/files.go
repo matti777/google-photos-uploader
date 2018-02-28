@@ -63,7 +63,7 @@ func mustScanDir(dir string, journal *pb.Journal,
 		entry := journalMap[name]
 
 		if entry != nil {
-			log.Debugf("Already uploaded, skipping..")
+			log.Debugf("Image '%v' already uploaded", name)
 			continue
 		}
 
@@ -72,11 +72,9 @@ func mustScanDir(dir string, journal *pb.Journal,
 		} else {
 			ext := filepath.Ext(info.Name())
 			ext = strings.ToLower(strings.TrimLeft(ext, "."))
-			log.Debugf("File ext is: %v", ext)
 
 			for _, e := range imageExtensions {
 				if ext == e {
-					log.Debugf("Ext matches %v - is image", e)
 					files = append(files, info)
 					break
 				}
@@ -88,28 +86,6 @@ func mustScanDir(dir string, journal *pb.Journal,
 }
 
 func getAlbum(dirName string) *photos.FeedEntry {
-
-	//mustUpload := false
-
-	/*
-		if album.AlbumId == "" {
-			// Check if there are files to upload; if so, must create an album
-			for _, e := range journal.Entries {
-				completed, err := ptypes.Timestamp(e.Completed)
-				if err != nil {
-					log.Fatalf("Failed to convert timestamp: %v", err)
-				}
-
-				if !e.IsDirectory && completed.IsZero() {
-					// Found file that's not been uploaded; we must upload it.
-					mustUpload = true
-					break
-				}
-			}
-		}
-	*/
-
-	//	if mustUpload {
 	albumName, err := replaceInString(dirName, nameSubstitutionTokens)
 	if err != nil {
 		log.Fatalf("Failed to replace in string: %v", err)
@@ -131,8 +107,7 @@ func getAlbum(dirName string) *photos.FeedEntry {
 		}
 	}
 
-	fmt.Printf("Missing album: %v", albumName)
-	//	}
+	fmt.Printf("Missing album: %v\n", albumName)
 
 	return nil
 }
@@ -216,8 +191,6 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 			if err := upload(dir, f, padLength, album); err != nil {
 				log.Fatalf("File upload failed: %v", err)
 			} else {
-				// Uploaded file successfully
-				//mustAddJournalEntry(dir, f.Name(), false, journal, &journalMap)
 				mustAddJournalEntry(dir, f.Name(), journal, &journalMap)
 			}
 		}
@@ -275,5 +248,5 @@ func mustProcessDir(dir string) {
 	files, dirs := mustScanDir(dir, journal, journalMap)
 	uploadAll(dir, dirName, journal, journalMap, files, dirs)
 
-	log.Debugf("Directory '%v' uploaded OK.", dirName)
+	log.Debugf("Directory '%v' processed.", dirName)
 }

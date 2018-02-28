@@ -50,8 +50,45 @@ var (
 	albumFeed *photos.Feed
 )
 
+func readFlags(c *cli.Context) {
+	disregardJournal = GlobalBoolT(c, "disregard-journal")
+	if disregardJournal {
+		log.Debugf("Disregarding reading journal files..")
+	}
+
+	recurse = GlobalBoolT(c, "recursive")
+	log.Debugf("Recurse into subdirectories: %v", recurse)
+
+	skipConfirmation = GlobalBoolT(c, "yes")
+
+	dryRun = GlobalBoolT(c, "dry-run")
+	if dryRun {
+		fmt.Printf("--dry-run enabled, not uploading anything\n")
+	}
+
+	exts := c.String("extensions")
+	if exts != "" {
+		s := strings.Split(exts, ",")
+		imageExtensions = make([]string, len(s))
+		for i, item := range s {
+			imageExtensions[i] = strings.ToLower(strings.Trim(item, " "))
+		}
+	}
+
+	log.Debugf("Using image extensions: %v", imageExtensions)
+
+	nameSubstitutionTokens = c.String("folder-name-substitutions")
+	log.Debugf("Using folder name substitution tokens: %v",
+		nameSubstitutionTokens)
+
+	capitalize = GlobalBoolT(c, "capitalize")
+	log.Debugf("Capitalizing folder name words: %v", capitalize)
+}
+
 func defaultAction(c *cli.Context) error {
 	log.Debugf("Running Default action..")
+
+	readFlags(c)
 
 	authorize := GlobalBoolT(c, "authorize")
 
@@ -119,39 +156,6 @@ func defaultAction(c *cli.Context) error {
 			log.Debugf("Album Title: '%v', ID: %v", e.Title, e.AlbumID)
 		}
 	}
-
-	disregardJournal = GlobalBoolT(c, "disregard-journal")
-	if disregardJournal {
-		log.Debugf("Disregarding reading journal files..")
-	}
-
-	recurse = GlobalBoolT(c, "recursive")
-	log.Debugf("Recurse into subdirectories: %v", recurse)
-
-	skipConfirmation = GlobalBoolT(c, "yes")
-
-	dryRun = GlobalBoolT(c, "dry-run")
-	if dryRun {
-		fmt.Printf("--dry-run enabled, not uploading anything\n")
-	}
-
-	exts := c.String("extensions")
-	if exts != "" {
-		s := strings.Split(exts, ",")
-		imageExtensions = make([]string, len(s))
-		for i, item := range s {
-			imageExtensions[i] = strings.ToLower(strings.Trim(item, " "))
-		}
-	}
-
-	log.Debugf("Using image extensions: %v", imageExtensions)
-
-	nameSubstitutionTokens = c.String("folder-name-substitutions")
-	log.Debugf("Using folder name substitution tokens: %v",
-		nameSubstitutionTokens)
-
-	capitalize = GlobalBoolT(c, "capitalize")
-	log.Debugf("Capitalizing folder name words: %v", capitalize)
 
 	mustProcessDir(baseDir)
 
