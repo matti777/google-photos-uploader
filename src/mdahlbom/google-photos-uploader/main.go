@@ -148,13 +148,7 @@ func defaultAction(c *cli.Context) error {
 	if f, err := photosClient.ListAlbums(); err != nil {
 		log.Fatalf("Failed to list Google Photos albums: %v", err)
 	} else {
-		log.Debugf("Got album feed: %v", f)
 		albumFeed = f
-
-		//TODO remove
-		for _, e := range f.Entries {
-			log.Debugf("Album Title: '%v', ID: %v", e.Title, e.AlbumID)
-		}
 	}
 
 	mustProcessDir(baseDir)
@@ -167,7 +161,7 @@ func main() {
 	setupLogging()
 
 	appname := os.Args[0]
-	log.Debugf("main(): running %v..", appname)
+	log.Debugf("main(): running binary %v..", appname)
 
 	appConfig = readAppConfig()
 	log.Debugf("Read appConfig: %+v", appConfig)

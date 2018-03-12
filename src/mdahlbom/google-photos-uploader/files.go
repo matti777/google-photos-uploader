@@ -14,7 +14,6 @@ import (
 
 	photos "mdahlbom/google-photos-uploader/google_photos"
 	"mdahlbom/google-photos-uploader/pb"
-	//"github.com/golang/protobuf/ptypes"
 )
 
 // Checks that a path is an existing directory
@@ -85,14 +84,19 @@ func mustScanDir(dir string, journal *pb.Journal,
 	return files, dirs
 }
 
+// Forms the album name and retrieves the matching Feed Entry or nil
+// if an album by that name is not found
 func getAlbum(dirName string) *photos.FeedEntry {
 	albumName, err := replaceInString(dirName, nameSubstitutionTokens)
 	if err != nil {
 		log.Fatalf("Failed to replace in string: %v", err)
 	}
 
+	log.Debugf("capitalize = %v", capitalize)
+
 	if capitalize {
 		albumName = strings.Title(albumName)
+		log.Debugf("Capitalized album name: %v", albumName)
 	}
 	albumName = strings.Trim(albumName, " \n\r")
 
@@ -183,6 +187,10 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 	// Only process files in this directory if there is something left to do
 	// and the album already exists
 	if album != nil {
+		log.Debugf("Got album: %+v", album)
+		mustConfirm("About to upload directory '%v' as folder '%v'",
+			dirName, album.Title)
+
 		// Calculate the common padding length from the longest filename
 		padLength := findLongestName(files)
 
@@ -217,13 +225,13 @@ func mustProcessDir(dir string) {
 	}
 
 	dirName := filepath.Base(dir)
-	folderName, err := replaceInString(dirName, nameSubstitutionTokens)
-	if err != nil {
-		log.Fatalf("Invalid replacement pattern: %v", nameSubstitutionTokens)
-	}
+	// folderName, err := replaceInString(dirName, nameSubstitutionTokens)
+	// if err != nil {
+	// 	log.Fatalf("Invalid replacement pattern: %v", nameSubstitutionTokens)
+	// }
 
-	mustConfirm("About to upload directory '%v' as folder '%v' - continue?",
-		dirName, folderName)
+	// mustConfirm("About to upload directory '%v' as folder '%v' - continue?",
+	// 	dirName, folderName)
 
 	log.Debugf("Processing directory %v ..", dir)
 

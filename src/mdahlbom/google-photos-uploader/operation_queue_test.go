@@ -9,6 +9,8 @@ import (
 func NewTimeoutTimer(d time.Duration, t *testing.T) *time.Timer {
 	timer := time.AfterFunc(d, func() {
 		// Timed out, fail the test
+		fmt.Println("Test Timeout timer fired!")
+		//TODO this doesnt work from here - it must be called from main thread
 		t.Errorf("Timed out")
 	})
 

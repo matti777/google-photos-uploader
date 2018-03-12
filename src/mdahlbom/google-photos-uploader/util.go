@@ -140,7 +140,7 @@ func mustConfirm(format string, args ...interface{}) {
 	}
 
 	text := fmt.Sprintf(format, args...)
-	fmt.Print(fmt.Sprintf("%v [Y/n] ", text))
+	fmt.Print(fmt.Sprintf("%v\nContinue? [Y/n] ", text))
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 

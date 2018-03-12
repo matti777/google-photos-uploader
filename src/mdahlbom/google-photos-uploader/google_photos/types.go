@@ -8,6 +8,7 @@ type Feed struct {
 
 // FeedEntry type (eg. an Album or a Photo)
 type FeedEntry struct {
+	ID      string `xml:"id"`
 	AlbumID string `xml:"albumid"`
 	Title   string `xml:"title"`
 }

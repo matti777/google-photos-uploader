@@ -1,12 +1,10 @@
 # Google Photos CLI Uploader
 
-A command line utility for uploading a local directory structure into Google Photos as new Albums. Each directory is uploaded as a new Album whose name is derived from the name of the directory.
+A command line utility for uploading a local directory structure into Google Photos as new Albums. Each directory is uploaded into an Album whose name is derived from the name of the directory.
 
-## WORK IN PROGRESS.
+Halfway into the work it turned out that Google in their infinite wisdom have, however, deprecated the Album creation API. Automatic Album creation being very crucial for this tool to be very useful, this project was completed mostly as an academic exercise.
 
-This is project just being started.
-
-## Install dependencies:
+## Installing dependencies
 
 ```sh
 go get -u github.com/op/go-logging

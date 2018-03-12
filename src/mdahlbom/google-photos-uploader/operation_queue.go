@@ -110,15 +110,28 @@ func (q *OperationQueue) start() {
 // Gracefully shuts down the queue, waiting for all operations to be completed.
 // No new operations can be Add()ed after this method has been called.
 func (q *OperationQueue) GracefulShutdown() {
-	q.lock.Lock()
-	q.shutdown = true
-	if q.itemsLeft == 0 {
-		log.Debugf("No items left - shutdown done w/o waiting")
-		q.lock.Unlock()
-		close(q.bufferChan)
+	done := func() bool {
+		q.lock.Lock()
+		defer q.lock.Unlock()
+
+		if q.shutdown {
+			log.Debugf("Already shut down.")
+			return true
+		}
+
+		q.shutdown = true
+		if q.itemsLeft == 0 {
+			log.Debugf("No items left - shutdown done w/o waiting")
+			close(q.bufferChan)
+			return true
+		}
+
+		return false
+	}()
+
+	if done {
 		return
 	}
-	q.lock.Unlock()
 
 	log.Debugf("Reading from q.shutdownDoneChan")
 	_, _ = <-q.shutdownDoneChan
