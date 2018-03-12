@@ -36,17 +36,28 @@ type sizeCountingReader struct {
 	io.Reader
 	io.Closer
 
-	callback func(count int64)
-	count    int64
+	callback     func(count int64)
+	numBytesRead int64
 }
 
-func (r sizeCountingReader) Read(p []byte) (int, error) {
+//TODO why is this getting called with another pointer address at EOF..?
+func (r *sizeCountingReader) Read(p []byte) (int, error) {
 	n, err := r.Reader.Read(p)
 
-	r.count += int64(n)
-	r.callback(r.count)
+	if err == nil {
+		r.numBytesRead += int64(n)
+		r.callback(r.numBytesRead)
+	}
 
 	return n, err
+}
+
+func (r *sizeCountingReader) Close() error {
+	if r.Closer != nil {
+		return r.Closer.Close()
+	} else {
+		return nil
+	}
 }
 
 func NewOAuth2Config(clientID, clientSecret string) oauth2.Config {
@@ -97,8 +108,14 @@ func NewImageUploadRequest(uri, mimeType string,
 
 	if callback != nil {
 		// Wrap the reader into one supporting progress callbacks
-		reader = sizeCountingReader{Reader: reader,
-			callback: callback, count: 0}
+		var closer io.Closer = nil
+		c, ok := reader.(io.Closer)
+		if ok {
+			closer = c
+		}
+		reader = &sizeCountingReader{Reader: reader, Closer: closer,
+			callback: callback, numBytesRead: 0}
+		ErrorLogFunc("Created reader: %+v", reader)
 	}
 
 	req, err := http.NewRequest("POST", uri, reader)

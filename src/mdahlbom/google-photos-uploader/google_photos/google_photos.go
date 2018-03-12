@@ -44,7 +44,7 @@ func (c *Client) UploadPhoto(path string, album *FeedEntry,
 	url := fmt.Sprintf("https://picasaweb.google.com/data/feed/api/user/"+
 		"default/albumid/%v", album.ID)
 
-	ErrorLogFunc("Using upload url: %v", url)
+	//ErrorLogFunc("Using upload url: %v", url)
 
 	req, err := util.NewImageUploadRequestFromFile(url, path, callback)
 	if err != nil {
@@ -57,7 +57,7 @@ func (c *Client) UploadPhoto(path string, album *FeedEntry,
 		return err
 	}
 
-	if res.StatusCode != 200 {
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		ErrorLogFunc("Got status code: %v", res.StatusCode)
 		return fmt.Errorf("Photo upload failed: %v", res.Status)
 	}

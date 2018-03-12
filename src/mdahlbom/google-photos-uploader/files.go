@@ -167,8 +167,11 @@ func upload(dir string, file os.FileInfo,
 	filePath := filepath.Join(dir, file.Name())
 
 	progressCallback := func(count int64) {
+		log.Debugf("progressCallback: count: %v", count)
 		bar.Set(int(count))
 	}
+
+	defer log.Debugf("upload() exiting..")
 
 	if dryRun {
 		return simulateUploadPhoto(filePath, file.Size(),

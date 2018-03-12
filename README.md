@@ -49,6 +49,10 @@ For any Go code you write to this module, follow these guidelines:
 2. Use `gofmt` for code formatting; hook it to your text editor's save step so it gets run automatically.
 3. Follow any and all best practices for writing clean Go code.
 
+## License
+
+Released under the MIT license. See [LICENSE.md](LICENSE.md).
+
 ## Acknowledgments
 
 Parts of this work are based on [Photobak](https://github.com/mholt/photobak) by Matt Holt.
