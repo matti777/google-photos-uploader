@@ -40,14 +40,11 @@ type sizeCountingReader struct {
 	numBytesRead int64
 }
 
-//TODO why is this getting called with another pointer address at EOF..?
 func (r *sizeCountingReader) Read(p []byte) (int, error) {
 	n, err := r.Reader.Read(p)
 
-	if err == nil {
-		r.numBytesRead += int64(n)
-		r.callback(r.numBytesRead)
-	}
+	r.numBytesRead += int64(n)
+	r.callback(r.numBytesRead)
 
 	return n, err
 }
@@ -115,7 +112,6 @@ func NewImageUploadRequest(uri, mimeType string,
 		}
 		reader = &sizeCountingReader{Reader: reader, Closer: closer,
 			callback: callback, numBytesRead: 0}
-		ErrorLogFunc("Created reader: %+v", reader)
 	}
 
 	req, err := http.NewRequest("POST", uri, reader)

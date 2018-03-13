@@ -70,15 +70,12 @@ func NewOperationQueue(maxConcurrency,
 // Processing loop; run in a dedicated goroutine. Calls the callback every
 // time an operation execution has completed.
 func (q *OperationQueue) run(callback func()) {
-	log.Debugf("Queue worker: Starting polling for operations")
-
 	for {
 		op, ok := <-q.bufferChan
 		if !ok {
 			log.Debugf("Channel closed - exiting worker goroutine!")
 			return
 		}
-		log.Debugf("Queue worker: got op, running it")
 		op()
 		callback()
 	}
@@ -87,21 +84,17 @@ func (q *OperationQueue) run(callback func()) {
 // Starts the queue's message processing mechanism
 func (q *OperationQueue) start() {
 	callback := func() {
-		log.Debugf("Op completion callback called")
 		q.lock.Lock()
 		defer q.lock.Unlock()
 
 		q.itemsLeft--
 		if q.shutdown && q.itemsLeft == 0 {
-			log.Debugf("Signaling shutdownDoneChan")
 			q.shutdownDoneChan <- true
-			log.Debugf("Signaling shutdownDoneChan done")
 			close(q.shutdownDoneChan)
 		}
 	}
 
 	// Create a gorotine to match the set maxConcurrency
-	log.Debugf("Creating %v concurrent worker goroutines", q.maxConcurrency)
 	for i := 0; i < q.maxConcurrency; i++ {
 		go q.run(callback)
 	}
@@ -133,9 +126,7 @@ func (q *OperationQueue) GracefulShutdown() {
 		return
 	}
 
-	log.Debugf("Reading from q.shutdownDoneChan")
 	_, _ = <-q.shutdownDoneChan
-	log.Debugf("Reading from q.shutdownDoneChan done.")
 
 	close(q.bufferChan)
 }
@@ -150,7 +141,6 @@ func (q *OperationQueue) Add(op func()) error {
 		return errShutdown
 	}
 	q.itemsLeft++
-	log.Debugf("Adding new item to queue; itemsLeft = %v", q.itemsLeft)
 	q.lock.Unlock()
 
 	// Insert operation into the buffer; this may block

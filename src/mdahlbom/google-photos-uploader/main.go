@@ -43,6 +43,9 @@ var (
 	// Whether to recurse into subdirectories
 	recurse = false
 
+	// Maximum concurrency (number of simultaneous uploads)
+	maxConcurrency = 1
+
 	// Google Photos API client
 	photosClient *photos.Client
 
@@ -83,6 +86,9 @@ func readFlags(c *cli.Context) {
 
 	capitalize = GlobalBoolT(c, "capitalize")
 	log.Debugf("Capitalizing folder name words: %v", capitalize)
+
+	maxConcurrency = c.Int("concurrency")
+	log.Debugf("maxConcurrency = %v", maxConcurrency)
 }
 
 func defaultAction(c *cli.Context) error {
@@ -209,6 +215,11 @@ func main() {
 			Name:  "dry-run, n",
 			Usage: "Specify to just scan, not actually upload anything",
 		},
+		cli.IntFlag{
+			Name:  "concurrency, c",
+			Usage: "Maximum number of simultaneous uploads",
+			Value: 1,
+		},
 		cli.StringFlag{
 			Name: "folder-name-substitutions, s",
 			Usage: "Directory name -> Photos Folder substition " +
@@ -219,7 +230,7 @@ func main() {
 				"all dashes, specify -s \"_, ,-, - \"",
 		},
 		cli.BoolTFlag{
-			Name: "capitalize, c",
+			Name: "capitalize, a",
 			Usage: "When forming the Photos Folder names, capitalize the " +
 				"first letter of each word, ie 'trip to tonga, 2018' " +
 				"would become 'Trip To Tonga, 2018'. Combine with " +
@@ -232,6 +243,5 @@ func main() {
 		},
 	}
 
-	//app.Commands = commands
 	app.Run(os.Args)
 }

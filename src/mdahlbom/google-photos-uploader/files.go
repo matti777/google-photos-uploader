@@ -147,13 +147,16 @@ func simulateUploadPhoto(path string, size int64, album *photos.FeedEntry,
 	return nil
 }
 
+// Synchronously uploads an image file (or simulates it). Manages a progress
+// bar for the upload.
 func upload(dir string, file os.FileInfo,
 	padLength int, album *photos.FeedEntry) error {
 
+	log.Debugf("Uploading file '%v'", file.Name())
 	paddedName := strutil.PadRight(file.Name(), padLength, ' ')
 
-	progress := uiprogress.New()
-	bar := progress.AddBar(int(file.Size())).PrependElapsed().AppendCompleted()
+	bar := uiprogress.AddBar(int(file.Size())).PrependElapsed().
+		AppendCompleted()
 	bar.PrependFunc(func(b *uiprogress.Bar) string {
 		return paddedName
 	})
@@ -161,23 +164,16 @@ func upload(dir string, file os.FileInfo,
 	bar.Head = '#'
 	bar.Empty = ' '
 
-	progress.Start()
-	defer progress.Stop()
-
 	filePath := filepath.Join(dir, file.Name())
 
 	progressCallback := func(count int64) {
-		log.Debugf("progressCallback: count: %v", count)
 		bar.Set(int(count))
 	}
-
-	defer log.Debugf("upload() exiting..")
 
 	if dryRun {
 		return simulateUploadPhoto(filePath, file.Size(),
 			album, progressCallback)
 	} else {
-		log.Debugf("Uploading file: %v", filePath)
 		return photosClient.UploadPhoto(filePath, album, progressCallback)
 	}
 }
@@ -197,14 +193,31 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 		// Calculate the common padding length from the longest filename
 		padLength := findLongestName(files)
 
+		// Create a concurrency execution queue for the uploads
+		q, err := NewOperationQueue(maxConcurrency, 100)
+		if err != nil {
+			log.Fatalf("Failed to create operation queue: %v", err)
+		}
+
+		uiprogress.Start()
+
 		// Process the files in this directory firs
 		for _, f := range files {
-			if err := upload(dir, f, padLength, album); err != nil {
-				log.Fatalf("File upload failed: %v", err)
-			} else {
-				mustAddJournalEntry(dir, f.Name(), journal, &journalMap)
-			}
+			file := f
+
+			q.Add(func() {
+				if err := upload(dir, file, padLength, album); err != nil {
+					log.Fatalf("File upload failed: %v", err)
+				} else {
+					mustAddJournalEntry(dir, file.Name(), journal, &journalMap)
+				}
+			})
 		}
+
+		// Wait for all the operations to complete
+		q.GracefulShutdown()
+		log.Debugf("All uploads finished.")
+		uiprogress.Stop()
 	}
 
 	// Then (possibly recursively) process the subdirectories
@@ -212,7 +225,6 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 		if recurse {
 			subDir := filepath.Join(dir, d.Name())
 			mustProcessDir(subDir)
-			//mustAddJournalEntry(dir, d.Name(), true, journal, &journalMap)
 		} else {
 			log.Debugf("Non-recursive; skipping directory: %v", d.Name())
 		}
@@ -228,17 +240,10 @@ func mustProcessDir(dir string) {
 	}
 
 	dirName := filepath.Base(dir)
-	// folderName, err := replaceInString(dirName, nameSubstitutionTokens)
-	// if err != nil {
-	// 	log.Fatalf("Invalid replacement pattern: %v", nameSubstitutionTokens)
-	// }
-
-	// mustConfirm("About to upload directory '%v' as folder '%v' - continue?",
-	// 	dirName, folderName)
 
 	log.Debugf("Processing directory %v ..", dir)
 
-	journal := &pb.Journal{}
+	journal := newEmptyJournal()
 
 	if !disregardJournal {
 		// Read the journal file of the directory

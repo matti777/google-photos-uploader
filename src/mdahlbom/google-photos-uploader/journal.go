@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"mdahlbom/google-photos-uploader/pb"
 
@@ -16,7 +17,21 @@ const (
 	journalFileName = ".photos-uploader.journal"
 )
 
-// Writes a directory's journal. Panics on failure.
+// Our read-write locks for accessing the journals
+var journalLocks = map[*pb.Journal]*sync.RWMutex{}
+
+// Returns the read-write lock for the journal, or panics if not found
+func mustGetJournalLock(journal *pb.Journal) *sync.RWMutex {
+	if l, ok := journalLocks[journal]; !ok {
+		log.Fatalf("Failed to get lock for journal")
+		return nil
+	} else {
+		return l
+	}
+}
+
+// Writes a directory's journal. Panics on failure. Access must be synchronized
+// from the outside; this method does not touch the locks.
 func mustWriteJournalFile(dir string, journal *pb.Journal) {
 	fileName := filepath.Join(dir, journalFileName)
 	log.Debugf("Writing Journal file: %v", fileName)
@@ -54,13 +69,29 @@ func readJournalFile(dir string) (*pb.Journal, error) {
 		return nil, err
 	}
 
+	journalLocks[journal] = new(sync.RWMutex)
+
 	return journal, nil
+}
+
+// Creates an empty journal (and a lock for it)
+func newEmptyJournal() *pb.Journal {
+	journal := &pb.Journal{}
+	journalLocks[journal] = new(sync.RWMutex)
+
+	return journal
 }
 
 // Adds a journal entry and persists the directory's journal entry to disk.
 // Panics on failure.
-func mustAddJournalEntry(dir string, name string, /*isDir bool,*/
+func mustAddJournalEntry(dir string, name string,
 	journal *pb.Journal, journalMap *map[string]*pb.JournalEntry) {
+
+	lock := mustGetJournalLock(journal)
+	lock.Lock()
+	defer lock.Unlock()
+
+	log.Debugf("Adding journal entry for '%v'", name)
 
 	// Make sure there isnt already such an entry (sanity check)
 	for _, e := range journal.Entries {
@@ -69,22 +100,24 @@ func mustAddJournalEntry(dir string, name string, /*isDir bool,*/
 		}
 	}
 	if (*journalMap)[name] != nil {
-		log.Fatalf("Already found journal map entry '%v' in journal", name)
+		log.Fatalf("Already found journal map entry '%v' in journal map", name)
 	}
 
-	entry := &pb.JournalEntry{Name: name, /*IsDirectory: isDir,*/
-		Completed: ptypes.TimestampNow()}
+	entry := &pb.JournalEntry{Name: name, Completed: ptypes.TimestampNow()}
 
 	journal.Entries = append(journal.Entries, entry)
 	(*journalMap)[name] = entry
 
 	// Save the journal
 	mustWriteJournalFile(dir, journal)
-	log.Debugf("Added journal entry: %+v", entry)
 }
 
 // Creates a map of the journal's file name entries for faster access
 func newJournalMap(journal *pb.Journal) map[string]*pb.JournalEntry {
+	lock := mustGetJournalLock(journal)
+	lock.RLock()
+	defer lock.RUnlock()
+
 	m := map[string]*pb.JournalEntry{}
 
 	if journal.Entries == nil {
