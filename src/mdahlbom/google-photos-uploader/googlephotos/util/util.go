@@ -1,4 +1,3 @@
-// Misc utility functions
 package util
 
 import (
@@ -17,19 +16,21 @@ import (
 
 const (
 	// Google's user info endpoint URL
-	userInfoEndpointUrlFmt = "https://www.googleapis.com/oauth2/v2/userinfo" +
+	userInfoEndpointURLFmt = "https://www.googleapis.com/oauth2/v2/userinfo" +
 		"?access_token=%v"
 )
 
+// UserInfo represents a Google user
 type UserInfo struct {
-	Id        string `json:"id"`
+	ID        string `json:"id"`
 	Name      string `json:"name"`
 	GivenName string `json:"given_name"`
 	LastName  string `json:"family_name"`
 }
 
-// Set this variable to enable error logging output from the library
-var ErrorLogFunc func(string, ...interface{}) = func(string, ...interface{}) {}
+// ErrorLogFunc is called to log any errors;
+// set this variable to enable error logging output from the library
+var ErrorLogFunc = func(string, ...interface{}) {}
 
 // Wraps io.Reader (and io.Closer) so that it counts the bytes read.
 type sizeCountingReader struct {
@@ -57,6 +58,7 @@ func (r *sizeCountingReader) Close() error {
 	}
 }
 
+// NewOAuth2Config creates a new OAuth2 configuration with client id + secret
 func NewOAuth2Config(clientID, clientSecret string) oauth2.Config {
 	return oauth2.Config{
 		ClientID:     clientID,
@@ -69,10 +71,11 @@ func NewOAuth2Config(clientID, clientSecret string) oauth2.Config {
 	}
 }
 
-// Retrieves user information from the Google user info endpoint with token
+// GetUserInfo retrieves user information from the Google user info
+// endpoint with token
 func GetUserInfo(token *oauth2.Token) (*UserInfo, error) {
 	// Retrieve user info
-	r, err := http.Get(fmt.Sprintf(userInfoEndpointUrlFmt, token.AccessToken))
+	r, err := http.Get(fmt.Sprintf(userInfoEndpointURLFmt, token.AccessToken))
 	if err != nil {
 		ErrorLogFunc("Error fetching user information: %v", err)
 		return nil, err
@@ -86,6 +89,9 @@ func GetUserInfo(token *oauth2.Token) (*UserInfo, error) {
 		return nil, err
 	}
 
+	//TODO get email if it is there and remove this
+	ErrorLogFunc("DO NOT LOG - user info response: %", string(contents))
+
 	info := new(UserInfo)
 	if err := json.Unmarshal(contents, info); err != nil {
 		ErrorLogFunc("Failed to unmarshal JSON: %v", err)
@@ -97,7 +103,8 @@ func GetUserInfo(token *oauth2.Token) (*UserInfo, error) {
 	return info, nil
 }
 
-// Creates a file upload request. If callback parameter is specified,
+// NewImageUploadRequest creates a file upload request.
+// If callback parameter is specified,
 // it will get called when data has been read (and thus submitted) from the
 // reader.
 func NewImageUploadRequest(uri, mimeType string,
@@ -105,7 +112,7 @@ func NewImageUploadRequest(uri, mimeType string,
 
 	if callback != nil {
 		// Wrap the reader into one supporting progress callbacks
-		var closer io.Closer = nil
+		var closer io.Closer
 		c, ok := reader.(io.Closer)
 		if ok {
 			closer = c
@@ -120,6 +127,15 @@ func NewImageUploadRequest(uri, mimeType string,
 		return nil, err
 	}
 
+	/* To upload using Google Photos API:
+
+			POST https://photoslibrary.googleapis.com/v1/uploads
+	Authorization: Bearer OAUTH2_TOKEN
+	Content-type: application/octet-stream
+	X-Goog-Upload-File-Name: FILENAME
+	X-Goog-Upload-Protocol: raw
+	*/
+
 	if mimeType != "" {
 		req.Header.Set("Content-Type", mimeType)
 	}
@@ -127,7 +143,8 @@ func NewImageUploadRequest(uri, mimeType string,
 	return req, nil
 }
 
-// Creates a file upload request. If callback parameter is specified,
+// NewImageUploadRequestFromFile creates a file upload request.
+// If callback parameter is specified,
 // it will get called when data has been read (and thus submitted) from the
 // reader.
 func NewImageUploadRequestFromFile(uri string,

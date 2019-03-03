@@ -1,6 +1,7 @@
 #!/bin/bash
 
-BUILD_FLAGS=""
+# Stop script execution at first error
+set -e
 
 if [ "X$1" == "Xhelp" ];
 then
@@ -11,9 +12,9 @@ fi
 if [ "X$1" == "Xnodebug" ];
 then
     echo "Disabling debug logging."
-    BUILD_FLAGS="-tags nodebug"
+    build_flags="-tags nodebug"
 fi
 
-MY_GOPATH="`pwd`:$GOPATH"
-GOPATH=$MY_GOPATH go build $BUILD_FLAGS -o photos-uploader \
+my_gopath="`pwd`:$GOPATH"
+GOPATH=$my_gopath go build $build_flags -o photos-uploader \
       mdahlbom/google-photos-uploader

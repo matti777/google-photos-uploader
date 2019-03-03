@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	photos "mdahlbom/google-photos-uploader/google_photos"
-	"mdahlbom/google-photos-uploader/google_photos/util"
+	photos "mdahlbom/google-photos-uploader/googlephotos"
+	"mdahlbom/google-photos-uploader/googlephotos/util"
 
 	logging "github.com/op/go-logging"
 	"github.com/urfave/cli"
@@ -31,6 +31,9 @@ var (
 	// folder names
 	capitalize = false
 
+	// Whether to skip parsing folder year from the folder name
+	noParseYear = false
+
 	// Whether to skip (assume Yes) all confirmations)
 	skipConfirmation = false
 
@@ -49,8 +52,11 @@ var (
 	// Google Photos API client
 	photosClient *photos.Client
 
-	// Feed representing the list of Albums
-	albumFeed *photos.Feed
+	// // Feed representing the list of Albums
+	// albumFeed *photos.Feed
+
+	// List of albums
+	albums []*photos.Album
 )
 
 func readFlags(c *cli.Context) {
@@ -84,6 +90,14 @@ func readFlags(c *cli.Context) {
 	log.Debugf("Using folder name substitution tokens: %v",
 		nameSubstitutionTokens)
 
+	useDefaultSubs := GlobalBoolT(c, "default-substitutions")
+	if useDefaultSubs {
+		nameSubstitutionTokens = "_, ,-, - "
+	}
+
+	noParseYear = GlobalBoolT(c, "no-parse-year")
+	log.Debugf("Skipping parsing folder year?: %v", noParseYear)
+
 	capitalize = GlobalBoolT(c, "capitalize")
 	log.Debugf("Capitalizing folder name words: %v", capitalize)
 
@@ -103,7 +117,7 @@ func defaultAction(c *cli.Context) error {
 	if appConfig.AuthToken == nil || appConfig.UserInfo == nil && !authorize {
 		fmt.Printf("Not authorized; you must perform the authorization " +
 			"flow. Run again and specify the --authorize flag.")
-		return fmt.Errorf("Missing authorization.")
+		return fmt.Errorf("Missing authorization")
 	}
 
 	baseDir := c.Args().Get(0)
@@ -116,14 +130,14 @@ func defaultAction(c *cli.Context) error {
 		baseDir = dir
 	}
 
-	log.Debugf("baseDir: %v", baseDir)
+	log.Debugf("baseDir input: %v", baseDir)
 
 	// Resolve the base dir
 	baseDir, err := filepath.Abs(baseDir)
 	if err != nil {
 		log.Fatalf("Failed to get absolute path for '%v': %v", err)
 	}
-	log.Debugf("Cleaned baseDir: %v", baseDir)
+	log.Debugf("Using baseDir: %v", baseDir)
 
 	// Check if need to authenticate the user
 	if authorize {
@@ -142,19 +156,23 @@ func defaultAction(c *cli.Context) error {
 		}
 	}
 
-	fmt.Printf("Authorized as '%v' -- specify --authorize to authorize "+
-		"on a different account.\n", appConfig.UserInfo.Name)
+	fmt.Printf("Authorized as '%v' (%v) -- specify --authorize to authorize "+
+		"on a different account.\n", appConfig.UserInfo.Name,
+		appConfig.UserInfo.ID)
 
 	// Create the API client
-	photosClient = photos.NewClient(appConfig.ClientID, appConfig.ClientSecret,
-		appConfig.AuthToken)
+	photosClient, err = photos.NewClient(appConfig.ClientID,
+		appConfig.ClientSecret, appConfig.AuthToken)
+	if err != nil {
+		return err
+	}
 
 	// Retrieve the list of albums
 	fmt.Printf("Fetching the list of Photos Albums..\n")
-	if f, err := photosClient.ListAlbums(); err != nil {
+	if l, err := photosClient.ListAlbums(); err != nil {
 		log.Fatalf("Failed to list Google Photos albums: %v", err)
 	} else {
-		albumFeed = f
+		albums = l
 	}
 
 	mustProcessDir(baseDir)
@@ -228,6 +246,18 @@ func main() {
 				"new1 would replace token old1 etc. For example to replace " +
 				"all underscores with spaces and add spaces around " +
 				"all dashes, specify -s \"_, ,-, - \"",
+		},
+		cli.BoolTFlag{
+			Name:  "default-substitutions, -ds",
+			Usage: "Same as defining -s \"_, ,-, - \"",
+		},
+		cli.BoolTFlag{
+			Name: "no-parse-year, -ny",
+			Usage: "Do not attempt to parse the year from the directory " +
+				"name; by default, an attempt is made to extract Photos Folder " +
+				"creation date using regex '.*[\\- _][0-9]{4}'. Eg. " +
+				"'Pictures_from_Thailand-2009' would generate folder creation " +
+				"year 2009.",
 		},
 		cli.BoolTFlag{
 			Name: "capitalize, a",

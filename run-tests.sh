@@ -6,4 +6,4 @@ MY_GOPATH="$GOPATH:`pwd`"
 # Run all the tests
 GOPATH=$MY_GOPATH go test -v mdahlbom/google-photos-uploader
 GOPATH=$MY_GOPATH go test -v \
-      mdahlbom/google-photos-uploader/google_photos/util/
+      mdahlbom/google-photos-uploader/googlephotos/util/

@@ -12,7 +12,7 @@ import (
 	"github.com/gosuri/uiprogress"
 	"github.com/gosuri/uiprogress/util/strutil"
 
-	photos "mdahlbom/google-photos-uploader/google_photos"
+	photos "mdahlbom/google-photos-uploader/googlephotos"
 	"mdahlbom/google-photos-uploader/pb"
 )
 
@@ -86,7 +86,7 @@ func mustScanDir(dir string, journal *pb.Journal,
 
 // Forms the album name and retrieves the matching Feed Entry or nil
 // if an album by that name is not found
-func getAlbum(dirName string) *photos.FeedEntry {
+func getAlbum(dirName string) *photos.Album {
 	albumName, err := replaceInString(dirName, nameSubstitutionTokens)
 	if err != nil {
 		log.Fatalf("Failed to replace in string: %v", err)
@@ -104,10 +104,10 @@ func getAlbum(dirName string) *photos.FeedEntry {
 
 	// We will need to have an existing album to upload to.
 	// See if it exists
-	for _, e := range albumFeed.Entries {
-		if e.Title == albumName {
-			log.Debugf("Found album '%v'", e.Title)
-			return &e
+	for _, a := range albums {
+		if a.Title == albumName {
+			log.Debugf("Found album '%v'", albumName)
+			return a
 		}
 	}
 
@@ -117,7 +117,7 @@ func getAlbum(dirName string) *photos.FeedEntry {
 }
 
 // Simulates the upload of a file.
-func simulateUploadPhoto(path string, size int64, album *photos.FeedEntry,
+func simulateUploadPhoto(path string, size int64, album *photos.Album,
 	callback func(int64)) error {
 
 	log.Debugf("Simulating uploading file: %v", path)
@@ -150,7 +150,7 @@ func simulateUploadPhoto(path string, size int64, album *photos.FeedEntry,
 // Synchronously uploads an image file (or simulates it). Manages a progress
 // bar for the upload.
 func upload(dir string, file os.FileInfo,
-	padLength int, album *photos.FeedEntry) error {
+	padLength int, album *photos.Album) error {
 
 	log.Debugf("Uploading file '%v'", file.Name())
 	paddedName := strutil.PadRight(file.Name(), padLength, ' ')

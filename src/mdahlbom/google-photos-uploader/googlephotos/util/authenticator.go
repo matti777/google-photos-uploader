@@ -14,7 +14,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// Our authenticator type. Construct using NewAuthenticator().
+// Authenticator is our authenticator type. Construct using NewAuthenticator().
 // This class implements the Google OAuth2 authorization code flow; for
 // more info, see:
 // https://developers.google.com/actions/identity/oauth2-code-flow
@@ -48,6 +48,8 @@ func openBrowser(url string) error {
 	return err
 }
 
+// NewAuthenticator creates a new Authenticator object with given
+// client id + secret.
 func NewAuthenticator(clientID, clientSecret string) *Authenticator {
 	return &Authenticator{oauth2Config: NewOAuth2Config(clientID, clientSecret),
 		ch:    make(chan *oauth2.Token),
@@ -106,7 +108,7 @@ func (a *Authenticator) auth(w http.ResponseWriter, r *http.Request) {
 
 // Starts listening to HTTP requests. Returns the listening address:port,
 // eg. localhost:12345
-func (a *Authenticator) listenToHttp(pathNonce string) (string, error) {
+func (a *Authenticator) listenToHTTP(pathNonce string) (string, error) {
 	l, err := net.Listen("tcp", "localhost:")
 	if err != nil {
 		ErrorLogFunc("Failed to Listen(): %v", err)
@@ -126,7 +128,7 @@ func (a *Authenticator) listenToHttp(pathNonce string) (string, error) {
 	return l.Addr().String(), nil
 }
 
-// Synchronously waits for an access token.
+// Authorize synchronously waits for an access token.
 func (a *Authenticator) Authorize() (*oauth2.Token, *UserInfo, error) {
 	appname := os.Args[0]
 	fmt.Printf("%v needs to authorize to access Google Photos. "+
@@ -138,7 +140,7 @@ func (a *Authenticator) Authorize() (*oauth2.Token, *UserInfo, error) {
 	a.stateToken = uuid.New().String()
 	ErrorLogFunc("Allocated state token: %v", a.stateToken)
 
-	addr, err := a.listenToHttp(nonce)
+	addr, err := a.listenToHTTP(nonce)
 	if err != nil {
 		return nil, nil, err
 	}
