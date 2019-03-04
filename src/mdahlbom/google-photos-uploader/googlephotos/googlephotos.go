@@ -4,7 +4,9 @@ package googlephotos
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"mdahlbom/google-photos-uploader/googlephotos/util"
 
@@ -41,10 +43,6 @@ func NewClient(clientID, clientSecret string,
 
 // ListAlbums Lists all the Albums
 func (c *Client) ListAlbums() ([]*Album, error) {
-	// url := "https://picasaweb.google.com/data/feed/api/user/default"
-	// return c.fetchFeed(url)
-
-	// nextPageToken = ""
 	var res *photoslibrary.ListAlbumsResponse
 	done := false
 	albums := make([]*Album, 0)
@@ -76,8 +74,9 @@ func (c *Client) ListAlbums() ([]*Album, error) {
 // UploadPhoto uploads a photo to an album synchronously.
 // If callback parameter is specified,
 // it will get called when data has been submitted.
+// Returns either an upload token or an error.
 func (c *Client) UploadPhoto(path string, album *Album,
-	callback func(int64)) error {
+	callback func(int64)) (string, error) {
 
 	/* To upload using Google Photos API:
 
@@ -96,26 +95,40 @@ func (c *Client) UploadPhoto(path string, album *Album,
 	Then, see batchCreate method of google.golang.org/api/photoslibrary/v1
 	*/
 
-	url := fmt.Sprintf("https://picasaweb.google.com/data/feed/api/user/"+
-		"default/albumid/%v", album.ID)
+	// url := fmt.Sprintf("https://picasaweb.google.com/data/feed/api/user/"+
+	// 	"default/albumid/%v", album.ID)
 
-	req, err := util.NewImageUploadRequestFromFile(url, path, callback)
+	req, err := util.NewImageUploadRequestFromFile(path, callback)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
 		ErrorLogFunc("Failed to POST new image: %v", err)
-		return err
+		return "", err
 	}
+
+	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		ErrorLogFunc("Got status code: %v", res.StatusCode)
-		return fmt.Errorf("Photo upload failed: %v", res.Status)
+		ErrorLogFunc("Got non-OK status code: %v", res.StatusCode)
+		return "", fmt.Errorf("Photo upload failed: %v", res.Status)
 	}
 
-	return nil
+	// In a success response, the response body should hold a single line of
+	// text which is the upload token for the image.
+	contents, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		ErrorLogFunc("Failed to read response body: %v", err)
+		return "", err
+	}
+
+	uploadToken := strings.Trim(string(contents), "\n ")
+
+	ErrorLogFunc("TODO: remove: upload token: %v", uploadToken)
+
+	return uploadToken, nil
 }
 
 // Returns a Feed for the given resource (endpoint URL)

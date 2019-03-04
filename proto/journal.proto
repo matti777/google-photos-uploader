@@ -3,7 +3,7 @@ syntax = "proto3";
 package uploader;
 option go_package = "mdahlbom/google-photos-uploader/pb";
 
-import "google/protobuf/timestamp.proto";
+// import "google/protobuf/timestamp.proto";
 
 message Journal {
     // List of files / subdirectories
@@ -13,6 +13,15 @@ message Journal {
 message JournalEntry {
     // Name (relative) of the file or directory
     string name = 1;
+
+    // Upload token for this journal entry
+    string upload_token = 2;
+
+    // Whether this a media item has been successfully created for this item
+    bool media_item_created = 3;
+
+    // Whether this item has successfully been added to an album
+    bool added_to_album = 4;
 
     // // Whether the entry is a directory
     // bool is_directory = 2;

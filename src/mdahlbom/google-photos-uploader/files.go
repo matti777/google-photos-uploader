@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gosuri/uiprogress"
 	"github.com/gosuri/uiprogress/util/strutil"
 
@@ -117,8 +118,9 @@ func getAlbum(dirName string) *photos.Album {
 }
 
 // Simulates the upload of a file.
+// Returns image upload token or error.
 func simulateUploadPhoto(path string, size int64, album *photos.Album,
-	callback func(int64)) error {
+	callback func(int64)) (string, error) {
 
 	log.Debugf("Simulating uploading file: %v", path)
 
@@ -144,13 +146,20 @@ func simulateUploadPhoto(path string, size int64, album *photos.Album,
 		remaining -= perStep
 	}
 
-	return nil
+	// Generate a random UUIDv4 to act as an upload token
+	uuidv4, err := uuid.NewRandom()
+	if err != nil {
+		return "", err
+	}
+
+	return uuidv4.String(), nil
 }
 
 // Synchronously uploads an image file (or simulates it). Manages a progress
 // bar for the upload.
+// Returns image upload token or error.
 func upload(dir string, file os.FileInfo,
-	padLength int, album *photos.Album) error {
+	padLength int, album *photos.Album) (string, error) {
 
 	log.Debugf("Uploading file '%v'", file.Name())
 	paddedName := strutil.PadRight(file.Name(), padLength, ' ')
@@ -178,9 +187,12 @@ func upload(dir string, file os.FileInfo,
 	}
 }
 
+// uploadAll uploads all photos in a given directory. It returns the
+// list of upload tokens for the uploaded photos.
 func uploadAll(dir, dirName string, journal *pb.Journal,
-	journalMap map[string]*pb.JournalEntry, files, dirs []os.FileInfo) {
+	journalMap map[string]*pb.JournalEntry, files []os.FileInfo) []string {
 
+	uploadTokens := make([]string, 0, len(files))
 	album := getAlbum(dirName)
 
 	// Only process files in this directory if there is something left to do
@@ -206,10 +218,14 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 			file := f
 
 			q.Add(func() {
-				if err := upload(dir, file, padLength, album); err != nil {
+				uploadToken, err := upload(dir, file, padLength, album)
+				if err != nil {
 					log.Fatalf("File upload failed: %v", err)
 				} else {
-					mustAddJournalEntry(dir, file.Name(), journal, &journalMap)
+					log.Debugf("Photo uploaded with token %v", uploadToken)
+					uploadTokens = append(uploadTokens, uploadToken)
+					mustAddJournalEntry(dir, file.Name(), uploadToken,
+						journal, &journalMap)
 				}
 			})
 		}
@@ -220,15 +236,7 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 		uiprogress.Stop()
 	}
 
-	// Then (possibly recursively) process the subdirectories
-	for _, d := range dirs {
-		if recurse {
-			subDir := filepath.Join(dir, d.Name())
-			mustProcessDir(subDir)
-		} else {
-			log.Debugf("Non-recursive; skipping directory: %v", d.Name())
-		}
-	}
+	return uploadTokens
 }
 
 // Processes all the entries in a single directory. Aborts as soon as
@@ -260,9 +268,24 @@ func mustProcessDir(dir string) {
 	// Create a lookup map for faster access
 	journalMap := newJournalMap(journal)
 
-	// Find all the files & subdirectories and upload them
+	// Find all the files & subdirectories
 	files, dirs := mustScanDir(dir, journal, journalMap)
-	uploadAll(dir, dirName, journal, journalMap, files, dirs)
+
+	// Upload all the files in this directory
+	uploadTokens := uploadAll(dir, dirName, journal, journalMap, files)
+
+	//TODO now we must create the mediaItems based on the tokens and the album!
+	log.Debugf("uploadTokens: %v", uploadTokens)
+
+	// If enabled, recurse into all the subdirectories
+	for _, d := range dirs {
+		if recurse {
+			subDir := filepath.Join(dir, d.Name())
+			mustProcessDir(subDir)
+		} else {
+			log.Debugf("Non-recursive; skipping directory: %v", d.Name())
+		}
+	}
 
 	log.Debugf("Directory '%v' processed.", dirName)
 }

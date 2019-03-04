@@ -10,7 +10,6 @@ import (
 	"mdahlbom/google-photos-uploader/pb"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes"
 )
 
 const (
@@ -22,12 +21,13 @@ var journalLocks = map[*pb.Journal]*sync.RWMutex{}
 
 // Returns the read-write lock for the journal, or panics if not found
 func mustGetJournalLock(journal *pb.Journal) *sync.RWMutex {
-	if l, ok := journalLocks[journal]; !ok {
+	l, ok := journalLocks[journal]
+	if !ok {
 		log.Fatalf("Failed to get lock for journal")
 		return nil
-	} else {
-		return l
 	}
+
+	return l
 }
 
 // Writes a directory's journal. Panics on failure. Access must be synchronized
@@ -84,7 +84,7 @@ func newEmptyJournal() *pb.Journal {
 
 // Adds a journal entry and persists the directory's journal entry to disk.
 // Panics on failure.
-func mustAddJournalEntry(dir string, name string,
+func mustAddJournalEntry(dir, name, uploadToken string,
 	journal *pb.Journal, journalMap *map[string]*pb.JournalEntry) {
 
 	lock := mustGetJournalLock(journal)
@@ -103,7 +103,7 @@ func mustAddJournalEntry(dir string, name string,
 		log.Fatalf("Already found journal map entry '%v' in journal map", name)
 	}
 
-	entry := &pb.JournalEntry{Name: name, Completed: ptypes.TimestampNow()}
+	entry := &pb.JournalEntry{Name: name, UploadToken: uploadToken}
 
 	journal.Entries = append(journal.Entries, entry)
 	(*journalMap)[name] = entry

@@ -5,19 +5,22 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/photoslibrary/v1"
 )
 
 const (
 	// Google's user info endpoint URL
 	userInfoEndpointURLFmt = "https://www.googleapis.com/oauth2/v2/userinfo" +
 		"?access_token=%v"
+
+	// URL to upload photo data
+	photoDataUploadURL = "https://photoslibrary.googleapis.com/v1/uploads"
 )
 
 // UserInfo represents a Google user
@@ -64,7 +67,9 @@ func NewOAuth2Config(clientID, clientSecret string) oauth2.Config {
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		Scopes: []string{
-			"https://picasaweb.google.com/data/",
+			// "https://picasaweb.google.com/data/",
+			photoslibrary.PhotoslibraryAppendonlyScope,
+			//TODO: find this as a constant
 			"https://www.googleapis.com/auth/userinfo.profile",
 		},
 		Endpoint: google.Endpoint,
@@ -107,21 +112,40 @@ func GetUserInfo(token *oauth2.Token) (*UserInfo, error) {
 // If callback parameter is specified,
 // it will get called when data has been read (and thus submitted) from the
 // reader.
-func NewImageUploadRequest(uri, mimeType string,
-	reader io.Reader, callback func(int64)) (*http.Request, error) {
+// func NewImageUploadRequest(mimeType string,
+// 	reader io.Reader, callback func(int64)) (*http.Request, error) {
 
-	if callback != nil {
-		// Wrap the reader into one supporting progress callbacks
-		var closer io.Closer
-		c, ok := reader.(io.Closer)
-		if ok {
-			closer = c
-		}
-		reader = &sizeCountingReader{Reader: reader, Closer: closer,
-			callback: callback, numBytesRead: 0}
+// 	return req, nil
+// }
+
+// NewImageUploadRequestFromFile creates a file upload request.
+// If callback parameter is specified,
+// it will get called when data has been read (and thus submitted) from the
+// reader.
+func NewImageUploadRequestFromFile(inputFilePath string,
+	callback func(int64)) (*http.Request, error) {
+
+	f, err := os.Open(inputFilePath)
+	if err != nil {
+		ErrorLogFunc("Failed to open file: %v", err)
+		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", uri, reader)
+	// if callback != nil {
+	// 	// Wrap the reader into one supporting progress callbacks
+	// 	var closer io.Closer
+	// 	c, ok := reader.(io.Closer)
+	// 	if ok {
+	// 		closer = c
+	// 	}
+	// 	reader = &sizeCountingReader{Reader: reader, Closer: closer,
+	// 		callback: callback, numBytesRead: 0}
+	// }
+
+	reader := &sizeCountingReader{Reader: f, Closer: f,
+		callback: callback, numBytesRead: 0}
+
+	req, err := http.NewRequest("POST", photoDataUploadURL, reader)
 	if err != nil {
 		ErrorLogFunc("Failed to create HTTP request: %v", err)
 		return nil, err
@@ -136,29 +160,9 @@ func NewImageUploadRequest(uri, mimeType string,
 	X-Goog-Upload-Protocol: raw
 	*/
 
-	if mimeType != "" {
-		req.Header.Set("Content-Type", mimeType)
-	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("X-Goog-Upload-File-Name", filepath.Base(inputFilePath))
+	req.Header.Set("X-Goog-Upload-Protocol", "raw")
 
 	return req, nil
-}
-
-// NewImageUploadRequestFromFile creates a file upload request.
-// If callback parameter is specified,
-// it will get called when data has been read (and thus submitted) from the
-// reader.
-func NewImageUploadRequestFromFile(uri string,
-	path string, callback func(int64)) (*http.Request, error) {
-
-	f, err := os.Open(path)
-	if err != nil {
-		ErrorLogFunc("Failed to open file: %v", err)
-		return nil, err
-	}
-
-	// Decide the MIME type by the file extension
-	ext := filepath.Ext(path)
-	mimeType := mime.TypeByExtension(ext)
-
-	return NewImageUploadRequest(uri, mimeType, f, callback)
 }
