@@ -198,3 +198,25 @@ func replaceInString(s, tokens string) (string, error) {
 
 	return replacer.Replace(s), nil
 }
+
+// chunked returns an array of arrays so that the original array is divided
+// into chunks of equal size (except for the remainder chunk).
+func chunked(arr []string, chunkSize int) [][]string {
+	arrayLen := len(arr)
+	numChunks := arrayLen / chunkSize
+	if arrayLen%chunkSize > 0 {
+		numChunks += 1
+	}
+
+	chunks := make([][]string, 0, numChunks)
+
+	for i := 0; i < arrayLen; i += chunkSize {
+		chunkEnd := i + chunkSize
+		if chunkEnd > arrayLen {
+			chunkEnd = arrayLen
+		}
+		chunks = append(chunks, arr[i:chunkEnd])
+	}
+
+	return chunks
+}
