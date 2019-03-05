@@ -17,16 +17,8 @@ message JournalEntry {
     // Upload token for this journal entry
     string upload_token = 2;
 
-    // Whether this a media item has been successfully created for this item
+    // Whether this a 'media item' has been successfully created for this entry.
+    // This also means the photo has been added to an album.
     bool media_item_created = 3;
-
-    // Whether this item has successfully been added to an album
-    bool added_to_album = 4;
-
-    // // Whether the entry is a directory
-    // bool is_directory = 2;
-
-    // // When the entry was completed (uploaded)
-    // google.protobuf.Timestamp completed = 3;
 }
 

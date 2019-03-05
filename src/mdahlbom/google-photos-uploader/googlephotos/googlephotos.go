@@ -14,6 +14,12 @@ import (
 	"google.golang.org/api/photoslibrary/v1"
 )
 
+const (
+	// MaxAddPhotosPerCall is the maximum number of photos to add to
+	// an album in one single call.
+	MaxAddPhotosPerCall = 50
+)
+
 // ErrorLogFunc is an optional logging function.
 // Set this variable to enable error logging output from the library
 var ErrorLogFunc func(string, ...interface{})
@@ -71,6 +77,58 @@ func (c *Client) ListAlbums() ([]*Album, error) {
 	return albums, nil
 }
 
+// CreateAlbum creates a new album
+func (c *Client) CreateAlbum(name string) (*Album, error) {
+	req := &photoslibrary.CreateAlbumRequest{
+		Album: &photoslibrary.Album{
+			Title: name,
+		},
+	}
+
+	album, err := c.photosClient.Albums.Create(req).Do()
+	if err != nil {
+		return nil, err
+	}
+
+	return &Album{ID: album.Id, Title: album.Title}, nil
+}
+
+// AddToAlbum adds the photos identified by their upload tokens to the album
+func (c *Client) AddToAlbum(album *Album, uploadTokens []string) error {
+	if len(uploadTokens) > MaxAddPhotosPerCall {
+		return fmt.Errorf("Maximum number of photos to add per call is %v",
+			MaxAddPhotosPerCall)
+	}
+
+	mediaItems := make([]*photoslibrary.NewMediaItem, len(uploadTokens))
+	for i, tok := range uploadTokens {
+		mediaItems[i] = &photoslibrary.NewMediaItem{
+			SimpleMediaItem: &photoslibrary.SimpleMediaItem{
+				UploadToken: tok,
+			},
+		}
+	}
+
+	req := &photoslibrary.BatchCreateMediaItemsRequest{
+		AlbumId:       album.ID,
+		NewMediaItems: mediaItems,
+	}
+
+	res, err := c.photosClient.MediaItems.BatchCreate(req).Do()
+	if err != nil {
+		return err
+	}
+
+	for _, r := range res.NewMediaItemResults {
+		if r.Status.Message != "" {
+			//TODO can we do something about this?
+			ErrorLogFunc("Failed to add a photo to album: %v", r.Status.Message)
+		}
+	}
+
+	return nil
+}
+
 // UploadPhoto uploads a photo to an album synchronously.
 // If callback parameter is specified,
 // it will get called when data has been submitted.
@@ -94,9 +152,6 @@ func (c *Client) UploadPhoto(path string, album *Album,
 
 	Then, see batchCreate method of google.golang.org/api/photoslibrary/v1
 	*/
-
-	// url := fmt.Sprintf("https://picasaweb.google.com/data/feed/api/user/"+
-	// 	"default/albumid/%v", album.ID)
 
 	req, err := util.NewImageUploadRequestFromFile(path, callback)
 	if err != nil {

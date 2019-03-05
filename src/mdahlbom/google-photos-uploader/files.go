@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,15 +32,18 @@ func directoryExists(dir string) (bool, error) {
 	}
 }
 
-// Scans a directory for files and subdirectories; returns the lists of
-// unprocessed files and subdirectories. Panics on error.
+// mustScanDir scans a directory for files and subdirectories; returns the
+// lists of unprocessed files and subdirectories as well as any upload tokens
+// not yet added to an album. Panics on error.
 func mustScanDir(dir string, journal *pb.Journal,
-	journalMap map[string]*pb.JournalEntry) ([]os.FileInfo, []os.FileInfo) {
+	journalMap map[string]*pb.JournalEntry) ([]os.FileInfo,
+	[]os.FileInfo, []string) {
 
 	d, err := os.Open(dir)
 	if err != nil {
 		log.Fatalf("Failed to open directory '%v': %v", dir, err)
 	}
+	defer d.Close()
 
 	infos, err := d.Readdir(0)
 	if err != nil {
@@ -50,6 +52,7 @@ func mustScanDir(dir string, journal *pb.Journal,
 
 	files := []os.FileInfo{}
 	dirs := []os.FileInfo{}
+	unaddedUploadTokens := make([]string, 0)
 
 	for _, info := range infos {
 		name := info.Name()
@@ -63,8 +66,13 @@ func mustScanDir(dir string, journal *pb.Journal,
 		entry := journalMap[name]
 
 		if entry != nil {
-			log.Debugf("Image '%v' already uploaded", name)
-			continue
+			if entry.MediaItemCreated {
+				log.Debugf("Image '%v' already uploaded", name)
+				continue
+			}
+
+			unaddedUploadTokens = append(unaddedUploadTokens, entry.UploadToken)
+			log.Debugf("Image '%v' uploaded but not added to album", name)
 		}
 
 		if info.IsDir() {
@@ -82,12 +90,11 @@ func mustScanDir(dir string, journal *pb.Journal,
 		}
 	}
 
-	return files, dirs
+	return files, dirs, unaddedUploadTokens
 }
 
-// Forms the album name and retrieves the matching Feed Entry or nil
-// if an album by that name is not found
-func getAlbum(dirName string) *photos.Album {
+// getAlbumName forms the album name from the directory name
+func getAlbumName(dirName string) string {
 	albumName, err := replaceInString(dirName, nameSubstitutionTokens)
 	if err != nil {
 		log.Fatalf("Failed to replace in string: %v", err)
@@ -101,20 +108,33 @@ func getAlbum(dirName string) *photos.Album {
 	}
 	albumName = strings.Trim(albumName, " \n\r")
 
-	log.Debugf("Looking for album with title '%v'", albumName)
+	return albumName
+}
 
-	// We will need to have an existing album to upload to.
-	// See if it exists
+// getAlbum retrieves the matching existing album by its name or creates
+// a new one if not found
+func getAlbum(name string) (*photos.Album, error) {
+	log.Debugf("Looking for album with title '%v'", name)
+
+	// See if an existing album with such name exists
 	for _, a := range albums {
-		if a.Title == albumName {
-			log.Debugf("Found album '%v'", albumName)
-			return a
+		if a.Title == name {
+			log.Debugf("Found album '%v'", name)
+			return a, nil
 		}
 	}
 
-	fmt.Printf("Missing album: %v\n", albumName)
+	log.Debugf("Creating missing album: '%v'", name)
 
-	return nil
+	album, err := photosClient.CreateAlbum(name)
+	if err != nil {
+		log.Errorf("Failed to create Photos Album: %v", err)
+		return nil, err
+	}
+
+	log.Debugf("Album created.")
+
+	return album, nil
 }
 
 // Simulates the upload of a file.
@@ -189,52 +209,43 @@ func upload(dir string, file os.FileInfo,
 
 // uploadAll uploads all photos in a given directory. It returns the
 // list of upload tokens for the uploaded photos.
-func uploadAll(dir, dirName string, journal *pb.Journal,
+func uploadAll(dir, dirName string, album *photos.Album, journal *pb.Journal,
 	journalMap map[string]*pb.JournalEntry, files []os.FileInfo) []string {
 
 	uploadTokens := make([]string, 0, len(files))
-	album := getAlbum(dirName)
 
-	// Only process files in this directory if there is something left to do
-	// and the album already exists
-	if album != nil {
-		log.Debugf("Got album: %+v", album)
-		mustConfirm("About to upload directory '%v' as folder '%v'",
-			dirName, album.Title)
+	// Calculate the common padding length from the longest filename
+	padLength := findLongestName(files)
 
-		// Calculate the common padding length from the longest filename
-		padLength := findLongestName(files)
-
-		// Create a concurrency execution queue for the uploads
-		q, err := NewOperationQueue(maxConcurrency, 100)
-		if err != nil {
-			log.Fatalf("Failed to create operation queue: %v", err)
-		}
-
-		uiprogress.Start()
-
-		// Process the files in this directory firs
-		for _, f := range files {
-			file := f
-
-			q.Add(func() {
-				uploadToken, err := upload(dir, file, padLength, album)
-				if err != nil {
-					log.Fatalf("File upload failed: %v", err)
-				} else {
-					log.Debugf("Photo uploaded with token %v", uploadToken)
-					uploadTokens = append(uploadTokens, uploadToken)
-					mustAddJournalEntry(dir, file.Name(), uploadToken,
-						journal, &journalMap)
-				}
-			})
-		}
-
-		// Wait for all the operations to complete
-		q.GracefulShutdown()
-		log.Debugf("All uploads finished.")
-		uiprogress.Stop()
+	// Create a concurrency execution queue for the uploads
+	q, err := NewOperationQueue(maxConcurrency, 100)
+	if err != nil {
+		log.Fatalf("Failed to create operation queue: %v", err)
 	}
+
+	uiprogress.Start()
+
+	// Process the files in this directory firs
+	for _, f := range files {
+		file := f
+
+		q.Add(func() {
+			uploadToken, err := upload(dir, file, padLength, album)
+			if err != nil {
+				log.Fatalf("File upload failed: %v", err)
+			} else {
+				log.Debugf("Photo uploaded with token %v", uploadToken)
+				uploadTokens = append(uploadTokens, uploadToken)
+				mustAddJournalEntry(dir, file.Name(), uploadToken,
+					journal, &journalMap)
+			}
+		})
+	}
+
+	// Wait for all the operations to complete
+	q.GracefulShutdown()
+	log.Debugf("All uploads finished.")
+	uiprogress.Stop()
 
 	return uploadTokens
 }
@@ -247,10 +258,19 @@ func mustProcessDir(dir string) {
 		log.Fatalf("Directory '%v' does not exist!", dir)
 	}
 
-	dirName := filepath.Base(dir)
-
 	log.Debugf("Processing directory %v ..", dir)
 
+	dirName := filepath.Base(dir)
+	albumName := getAlbumName(dirName)
+
+	mustConfirm("About to upload directory '%v' as folder '%v'",
+		dirName, albumName)
+
+	// Get / create album by albumName
+	album, err := getAlbum(albumName)
+	if err != nil {
+		log.Fatalf("Failed to get album: %v", err)
+	}
 	journal := newEmptyJournal()
 
 	if !disregardJournal {
@@ -269,13 +289,20 @@ func mustProcessDir(dir string) {
 	journalMap := newJournalMap(journal)
 
 	// Find all the files & subdirectories
-	files, dirs := mustScanDir(dir, journal, journalMap)
+	files, dirs, unaddedUploadTokens := mustScanDir(dir, journal, journalMap)
+	log.Debugf("unaddedUploadTokens: %v", unaddedUploadTokens)
 
 	// Upload all the files in this directory
-	uploadTokens := uploadAll(dir, dirName, journal, journalMap, files)
+	uploadTokens := uploadAll(dir, dirName, album, journal, journalMap, files)
+
+	// Add all previously uploaded but not added to any album -photos get
+	// added to this album.
+	uploadTokens = append(uploadTokens, unaddedUploadTokens...)
 
 	//TODO now we must create the mediaItems based on the tokens and the album!
 	log.Debugf("uploadTokens: %v", uploadTokens)
+	// We must split the tokens into groups of max MaxAddPhotosPerCall items
+	//TODO
 
 	// If enabled, recurse into all the subdirectories
 	for _, d := range dirs {

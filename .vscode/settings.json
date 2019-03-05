@@ -1,3 +1,5 @@
 {
-    "go.inferGopath": true
+    "go.gopath": "/Users/matti/src/google-photos-uploader-cli:/Users/matti/go",
+    "python.pythonPath": "/usr/local/bin/python3",
 }
+
