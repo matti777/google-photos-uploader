@@ -31,10 +31,6 @@ type UserInfo struct {
 	LastName  string `json:"family_name"`
 }
 
-// ErrorLogFunc is called to log any errors;
-// set this variable to enable error logging output from the library
-var ErrorLogFunc = func(string, ...interface{}) {}
-
 // Wraps io.Reader (and io.Closer) so that it counts the bytes read.
 type sizeCountingReader struct {
 	io.Reader
@@ -68,9 +64,9 @@ func NewOAuth2Config(clientID, clientSecret string) oauth2.Config {
 		ClientSecret: clientSecret,
 		Scopes: []string{
 			// "https://picasaweb.google.com/data/",
-			photoslibrary.PhotoslibraryAppendonlyScope,
+			photoslibrary.PhotoslibraryScope,
 			//TODO: find this as a constant
-			"https://www.googleapis.com/auth/userinfo.profile",
+			// "https://www.googleapis.com/auth/userinfo.profile",
 		},
 		Endpoint: google.Endpoint,
 	}
@@ -82,41 +78,23 @@ func GetUserInfo(token *oauth2.Token) (*UserInfo, error) {
 	// Retrieve user info
 	r, err := http.Get(fmt.Sprintf(userInfoEndpointURLFmt, token.AccessToken))
 	if err != nil {
-		ErrorLogFunc("Error fetching user information: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("Error fetching user information: %v", err)
 	}
 
 	defer r.Body.Close()
 
 	contents, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		ErrorLogFunc("Failed to read response body: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("Failed to read response body: %v", err)
 	}
-
-	//TODO get email if it is there and remove this
-	ErrorLogFunc("DO NOT LOG - user info response: %", string(contents))
 
 	info := new(UserInfo)
 	if err := json.Unmarshal(contents, info); err != nil {
-		ErrorLogFunc("Failed to unmarshal JSON: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("Failed to unmarshal JSON: %v", err)
 	}
-
-	ErrorLogFunc("Got UserInfo: %+v", info)
 
 	return info, nil
 }
-
-// NewImageUploadRequest creates a file upload request.
-// If callback parameter is specified,
-// it will get called when data has been read (and thus submitted) from the
-// reader.
-// func NewImageUploadRequest(mimeType string,
-// 	reader io.Reader, callback func(int64)) (*http.Request, error) {
-
-// 	return req, nil
-// }
 
 // NewImageUploadRequestFromFile creates a file upload request.
 // If callback parameter is specified,
@@ -127,38 +105,16 @@ func NewImageUploadRequestFromFile(inputFilePath string,
 
 	f, err := os.Open(inputFilePath)
 	if err != nil {
-		ErrorLogFunc("Failed to open file: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("Failed to open file: %v", err)
 	}
-
-	// if callback != nil {
-	// 	// Wrap the reader into one supporting progress callbacks
-	// 	var closer io.Closer
-	// 	c, ok := reader.(io.Closer)
-	// 	if ok {
-	// 		closer = c
-	// 	}
-	// 	reader = &sizeCountingReader{Reader: reader, Closer: closer,
-	// 		callback: callback, numBytesRead: 0}
-	// }
 
 	reader := &sizeCountingReader{Reader: f, Closer: f,
 		callback: callback, numBytesRead: 0}
 
 	req, err := http.NewRequest("POST", photoDataUploadURL, reader)
 	if err != nil {
-		ErrorLogFunc("Failed to create HTTP request: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("Failed to create upload request: %v", err)
 	}
-
-	/* To upload using Google Photos API:
-
-			POST https://photoslibrary.googleapis.com/v1/uploads
-	Authorization: Bearer OAUTH2_TOKEN
-	Content-type: application/octet-stream
-	X-Goog-Upload-File-Name: FILENAME
-	X-Goog-Upload-Protocol: raw
-	*/
 
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("X-Goog-Upload-File-Name", filepath.Base(inputFilePath))

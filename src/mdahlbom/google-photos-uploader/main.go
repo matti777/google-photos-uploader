@@ -148,7 +148,6 @@ func defaultAction(c *cli.Context) error {
 		if err != nil {
 			log.Fatalf("Failed to get authorization token")
 		} else {
-			log.Debugf("Got oauth2 token: %v", token)
 			fmt.Println("Authorization OK!")
 			appConfig.AuthToken = token
 			appConfig.UserInfo = userInfo
@@ -173,6 +172,10 @@ func defaultAction(c *cli.Context) error {
 		log.Fatalf("Failed to list Google Photos albums: %v", err)
 	} else {
 		albums = l
+	}
+
+	for _, a := range albums {
+		log.Debugf("Got Photos Album: '%v'", a.Title)
 	}
 
 	mustProcessDir(baseDir)

@@ -299,10 +299,27 @@ func mustProcessDir(dir string) {
 	// added to this album.
 	uploadTokens = append(uploadTokens, unaddedUploadTokens...)
 
-	//TODO now we must create the mediaItems based on the tokens and the album!
-	log.Debugf("uploadTokens: %v", uploadTokens)
 	// We must split the tokens into groups of max MaxAddPhotosPerCall items
-	//TODO
+	chunks := chunked(uploadTokens, photos.MaxAddPhotosPerCall)
+	for _, c := range chunks {
+		// Create n media items at a time in the album
+		if err := photosClient.AddToAlbum(album, c); err != nil {
+			log.Fatalf("Failed to add photos to album: %v", err)
+		}
+	}
+
+	// Update all the journal entries to reflect they were successfully added
+	for _, tok := range uploadTokens {
+		for _, e := range journal.Entries {
+			if e.UploadToken == tok {
+				e.MediaItemCreated = true
+				break
+			}
+		}
+	}
+
+	// Save the updated journal for this directory
+	mustWriteJournalFile(dir, journal)
 
 	// If enabled, recurse into all the subdirectories
 	for _, d := range dirs {

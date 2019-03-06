@@ -20,10 +20,6 @@ const (
 	MaxAddPhotosPerCall = 50
 )
 
-// ErrorLogFunc is an optional logging function.
-// Set this variable to enable error logging output from the library
-var ErrorLogFunc func(string, ...interface{})
-
 // Client is Our API client type. Create with NewClient().
 type Client struct {
 	httpClient   *http.Client
@@ -40,7 +36,6 @@ func NewClient(clientID, clientSecret string,
 
 	photosClient, err := photoslibrary.New(httpClient)
 	if err != nil {
-		ErrorLogFunc("Failed to create Photos API client: %v", err)
 		return nil, err
 	}
 
@@ -61,7 +56,6 @@ func (c *Client) ListAlbums() ([]*Album, error) {
 
 		res, err := req.Do()
 		if err != nil {
-			ErrorLogFunc("Failed to list albums: %v", err)
 			return nil, err
 		}
 
@@ -122,7 +116,7 @@ func (c *Client) AddToAlbum(album *Album, uploadTokens []string) error {
 	for _, r := range res.NewMediaItemResults {
 		if r.Status.Message != "" {
 			//TODO can we do something about this?
-			ErrorLogFunc("Failed to add a photo to album: %v", r.Status.Message)
+			fmt.Println("Failed to add a photo to the album")
 		}
 	}
 
@@ -136,23 +130,6 @@ func (c *Client) AddToAlbum(album *Album, uploadTokens []string) error {
 func (c *Client) UploadPhoto(path string, album *Album,
 	callback func(int64)) (string, error) {
 
-	/* To upload using Google Photos API:
-
-			POST https://photoslibrary.googleapis.com/v1/uploads
-	Authorization: Bearer OAUTH2_TOKEN
-	Content-type: application/octet-stream
-	X-Goog-Upload-File-Name: FILENAME
-	X-Goog-Upload-Protocol: raw
-
-	Request body:
-	BINARY FILE
-
-	Response body:
-	UPLOAD TOKEN
-
-	Then, see batchCreate method of google.golang.org/api/photoslibrary/v1
-	*/
-
 	req, err := util.NewImageUploadRequestFromFile(path, callback)
 	if err != nil {
 		return "", err
@@ -160,14 +137,12 @@ func (c *Client) UploadPhoto(path string, album *Album,
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
-		ErrorLogFunc("Failed to POST new image: %v", err)
-		return "", err
+		return "", fmt.Errorf("Failed to POST new image: %v", err)
 	}
 
 	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		ErrorLogFunc("Got non-OK status code: %v", res.StatusCode)
 		return "", fmt.Errorf("Photo upload failed: %v", res.Status)
 	}
 
@@ -175,51 +150,10 @@ func (c *Client) UploadPhoto(path string, album *Album,
 	// text which is the upload token for the image.
 	contents, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		ErrorLogFunc("Failed to read response body: %v", err)
-		return "", err
+		return "", fmt.Errorf("Failed to read Photos API response: %v", err)
 	}
 
 	uploadToken := strings.Trim(string(contents), "\n ")
 
-	ErrorLogFunc("TODO: remove: upload token: %v", uploadToken)
-
 	return uploadToken, nil
 }
-
-// Returns a Feed for the given resource (endpoint URL)
-// func (c *Client) fetchFeed(endpoint string) (*Feed, error) {
-// 	req, err := http.NewRequest("GET", endpoint, nil)
-// 	if err != nil {
-// 		ErrorLogFunc("Failed to create HTTP request: %v", err)
-// 		return nil, err
-// 	}
-
-// 	req.Header.Set("GData-Version", "3")
-
-// 	res, err := c.httpClient.Do(req)
-// 	if err != nil {
-// 		ErrorLogFunc("Failed to fetch the feed: %v", err)
-// 		return nil, err
-// 	}
-
-// 	defer res.Body.Close()
-
-// 	if res.StatusCode != http.StatusOK {
-// 		ErrorLogFunc("Got non-OK response code: %v", res.StatusCode)
-// 		return nil, errors.New(res.Status)
-// 	}
-
-// 	contents, err := ioutil.ReadAll(res.Body)
-// 	if err != nil {
-// 		ErrorLogFunc("Failed to read response body: %v", err)
-// 		return nil, err
-// 	}
-
-// 	feed := new(Feed)
-// 	if err := xml.Unmarshal(contents, feed); err != nil {
-// 		ErrorLogFunc("Failed to unmarshal XML: %v", err)
-// 		return nil, err
-// 	}
-
-// 	return feed, nil
-// }

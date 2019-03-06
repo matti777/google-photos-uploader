@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	photos "mdahlbom/google-photos-uploader/googlephotos"
 	"mdahlbom/google-photos-uploader/googlephotos/util"
 
 	logging "github.com/op/go-logging"
@@ -45,10 +44,6 @@ func setupLogging() {
 	} else {
 		logging.SetLevel(logging.INFO, "uploader")
 	}
-
-	// Hook up the library's error logger functions to the error log
-	photos.ErrorLogFunc = log.Errorf
-	util.ErrorLogFunc = log.Errorf
 }
 
 // Returns the path to the app config file. Panics on failure.
