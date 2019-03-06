@@ -20,10 +20,10 @@ import (
 
 // Application configuration file structure
 type appConfiguration struct {
-	ClientID     string
-	ClientSecret string
-	AuthToken    *oauth2.Token
-	UserInfo     *util.UserInfo
+	ClientID     string        `json:"clientId"`
+	ClientSecret string        `json:"clientSecret"`
+	AuthToken    *oauth2.Token `json:"authToken"`
+	UserInfo     util.UserInfo `json:"userInfo"`
 }
 
 const (
@@ -87,6 +87,11 @@ func mustWriteAppConfig(c *appConfiguration) {
 	file, err := os.Create(appCfgFilePath)
 	if err != nil {
 		log.Fatalf("Failed to open app cfg file for writing: %v", err)
+	}
+
+	// Make sure the file is not readable by others
+	if err := os.Chmod(appCfgFilePath, 0600); err != nil {
+		log.Fatalf("Failed to chmod config file: %v", err)
 	}
 
 	encoder := json.NewEncoder(file)

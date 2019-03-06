@@ -93,6 +93,8 @@ func (a *Authenticator) auth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// fmt.Printf("Got exchange token: %+v\n", token)
+
 	// Done; send the token for the waiting routine
 	a.ch <- token
 
@@ -151,8 +153,6 @@ func (a *Authenticator) Authorize() (*oauth2.Token, *UserInfo, error) {
 	// Wait for the code on the channel; the HTTP handler will send it
 	select {
 	case token := <-a.ch:
-		fmt.Println("Authorization OK.")
-
 		info, err := GetUserInfo(token)
 
 		return token, info, err

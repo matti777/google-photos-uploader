@@ -114,7 +114,8 @@ func defaultAction(c *cli.Context) error {
 
 	// Make sure we have an auth token, ie. the user has performed the
 	// authorization flow.
-	if appConfig.AuthToken == nil || appConfig.UserInfo == nil && !authorize {
+	if (appConfig.AuthToken == nil || appConfig.UserInfo.ID == "") &&
+		!authorize {
 		fmt.Printf("Not authorized; you must perform the authorization " +
 			"flow. Run again and specify the --authorize flag.")
 		return fmt.Errorf("Missing authorization")
@@ -150,7 +151,8 @@ func defaultAction(c *cli.Context) error {
 		} else {
 			fmt.Println("Authorization OK!")
 			appConfig.AuthToken = token
-			appConfig.UserInfo = userInfo
+			appConfig.UserInfo = *userInfo
+			log.Debugf("UserInfo: %+v", appConfig.UserInfo)
 			mustWriteAppConfig(appConfig)
 		}
 	}
@@ -191,7 +193,7 @@ func main() {
 	log.Debugf("main(): running binary %v..", appname)
 
 	appConfig = readAppConfig()
-	log.Debugf("Read appConfig: %+v", appConfig)
+	log.Debugf("Read user info: %+v", appConfig.UserInfo)
 	if appConfig.ClientID == "" || appConfig.ClientSecret == "" {
 		appConfig.ClientID, appConfig.ClientSecret = mustReadAppCredentials()
 		log.Debugf("Got appConfig from stdin: %+v", appConfig)

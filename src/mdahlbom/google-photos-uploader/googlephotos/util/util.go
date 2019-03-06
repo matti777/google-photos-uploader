@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/api/photoslibrary/v1"
+	photoslibrary "google.golang.org/api/photoslibrary/v1"
 )
 
 const (
@@ -23,7 +23,8 @@ const (
 	photoDataUploadURL = "https://photoslibrary.googleapis.com/v1/uploads"
 )
 
-// UserInfo represents a Google user
+// UserInfo represents a Google user. The JSON field names are dictated by
+// the Google userinfo API.
 type UserInfo struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -59,39 +60,51 @@ func (r *sizeCountingReader) Close() error {
 
 // NewOAuth2Config creates a new OAuth2 configuration with client id + secret
 func NewOAuth2Config(clientID, clientSecret string) oauth2.Config {
+
+	scopes := []string{
+		"https://www.googleapis.com/auth/userinfo.profile",
+		photoslibrary.PhotoslibraryScope,
+	}
+
 	return oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
-		Scopes: []string{
-			// "https://picasaweb.google.com/data/",
-			photoslibrary.PhotoslibraryScope,
-			//TODO: find this as a constant
-			// "https://www.googleapis.com/auth/userinfo.profile",
-		},
-		Endpoint: google.Endpoint,
+		Scopes:       scopes,
+		Endpoint:     google.Endpoint,
 	}
 }
 
 // GetUserInfo retrieves user information from the Google user info
 // endpoint with token
 func GetUserInfo(token *oauth2.Token) (*UserInfo, error) {
+	// fmt.Sprintf("access token: %+v\n", token)
+
 	// Retrieve user info
-	r, err := http.Get(fmt.Sprintf(userInfoEndpointURLFmt, token.AccessToken))
+	url := fmt.Sprintf(userInfoEndpointURLFmt, token.AccessToken)
+	// fmt.Printf("Getting UserInfo from: %v\n", url)
+
+	res, err := http.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("Error fetching user information: %v", err)
 	}
 
-	defer r.Body.Close()
+	defer res.Body.Close()
 
-	contents, err := ioutil.ReadAll(r.Body)
+	contents, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read response body: %v", err)
+	}
+	// fmt.Printf("Read userinfo contents: %v\n", string(contents))
+
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, fmt.Errorf("GetUserInfo failed: %v", string(contents))
 	}
 
 	info := new(UserInfo)
 	if err := json.Unmarshal(contents, info); err != nil {
 		return nil, fmt.Errorf("Failed to unmarshal JSON: %v", err)
 	}
+	// fmt.Printf("Received UserInfo: %+v\n", info)
 
 	return info, nil
 }
