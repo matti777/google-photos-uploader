@@ -120,6 +120,10 @@ func getAlbumName(dirName string) string {
 // getAlbum retrieves the matching existing album by its name or creates
 // a new one if not found
 func getAlbum(name string) (*photos.Album, error) {
+	if dryRun {
+		log.Fatalf("getAlbum called with dryRun enabled")
+	}
+
 	log.Debugf("Looking for album with title '%v'", name)
 
 	// See if an existing album with such name exists
@@ -131,12 +135,6 @@ func getAlbum(name string) (*photos.Album, error) {
 	}
 
 	log.Debugf("Creating missing album: '%v'", name)
-
-	if dryRun {
-		log.Debugf("Dry run enabled; simulating album creation.")
-		uuidv4, _ := uuid.NewRandom()
-		return &photos.Album{ID: uuidv4.String(), Title: name}, nil
-	}
 
 	album, err := photosClient.CreateAlbum(name)
 	if err != nil {
@@ -151,7 +149,7 @@ func getAlbum(name string) (*photos.Album, error) {
 
 // Simulates the upload of a file.
 // Returns image upload token or error.
-func simulateUploadPhoto(path string, size int64, album *photos.Album,
+func simulateUploadPhoto(path string, size int64,
 	callback func(int64)) (string, error) {
 
 	const steps = 10
@@ -188,10 +186,7 @@ func simulateUploadPhoto(path string, size int64, album *photos.Album,
 // Synchronously uploads an image file (or simulates it). Manages a progress
 // bar for the upload.
 // Returns image upload token or error.
-func upload(dir string, file os.FileInfo,
-	padLength int, album *photos.Album) (string, error) {
-
-	// log.Debugf("Uploading file '%v'", file.Name())
+func upload(dir string, file os.FileInfo, padLength int) (string, error) {
 	paddedName := strutil.PadRight(file.Name(), padLength, ' ')
 
 	bar := uiprogress.AddBar(int(file.Size())).PrependElapsed().
@@ -210,16 +205,15 @@ func upload(dir string, file os.FileInfo,
 	}
 
 	if dryRun {
-		return simulateUploadPhoto(filePath, file.Size(),
-			album, progressCallback)
-	} else {
-		return photosClient.UploadPhoto(filePath, album, progressCallback)
+		return simulateUploadPhoto(filePath, file.Size(), progressCallback)
 	}
+
+	return photosClient.UploadPhoto(filePath, progressCallback)
 }
 
 // uploadAll uploads all photos in a given directory. It returns the
 // list of upload tokens for the uploaded photos.
-func uploadAll(dir, dirName string, album *photos.Album, journal *pb.Journal,
+func uploadAll(dir, dirName string, journal *pb.Journal,
 	journalMap map[string]*pb.JournalEntry, files []os.FileInfo) []string {
 
 	uploadTokens := make([]string, 0, len(files))
@@ -240,8 +234,7 @@ func uploadAll(dir, dirName string, album *photos.Album, journal *pb.Journal,
 		file := f
 
 		q.Add(func() {
-			// log.Debugf("Uploading file '%v'", file.Name)
-			uploadToken, err := upload(dir, file, padLength, album)
+			uploadToken, err := upload(dir, file, padLength)
 			if err != nil {
 				log.Fatalf("File upload failed: %v", err)
 			} else {
@@ -249,7 +242,7 @@ func uploadAll(dir, dirName string, album *photos.Album, journal *pb.Journal,
 					log.Debugf("Photo uploaded with token %v", uploadToken)
 					uploadTokens = append(uploadTokens, uploadToken)
 				} else {
-					log.Debugf("Uploaded photo didnt receive upload token " +
+					log.Debugf("Uploaded photo didn't receive upload token " +
 						"-- it has already been uploaded with another token.")
 				}
 
@@ -282,14 +275,6 @@ func mustProcessDir(dir string) {
 	dirName := filepath.Base(dir)
 	albumName := getAlbumName(dirName)
 
-	mustConfirm("About to upload directory '%v' as folder '%v'",
-		dirName, albumName)
-
-	// Get / create album by albumName
-	album, err := getAlbum(albumName)
-	if err != nil {
-		log.Fatalf("Failed to get album: %v", err)
-	}
 	journal := newEmptyJournal()
 
 	if !disregardJournal {
@@ -307,16 +292,33 @@ func mustProcessDir(dir string) {
 
 	// Find all the files & subdirectories
 	files, dirs, unaddedUploadTokens := mustScanDir(dir, journal, journalMap)
-	log.Debugf("unaddedUploadTokens: %v", unaddedUploadTokens)
 
-	// Upload all the files in this directory
-	uploadTokens := uploadAll(dir, dirName, album, journal, journalMap, files)
+	uploadTokens := make([]string, 0)
+
+	if len(files) > 0 {
+		// Ask the user whether to continue uploading to this album
+		mustConfirm("About to upload directory '%v' (%v photos) as album '%v'",
+			dirName, len(files), albumName)
+
+		// Upload all the files in this directory
+		uploadTokens = uploadAll(dir, dirName, journal, journalMap, files)
+	}
 
 	// Add all previously uploaded but not added to any album -photos get
 	// added to this album.
 	uploadTokens = append(uploadTokens, unaddedUploadTokens...)
 
-	if !dryRun {
+	var album *photos.Album
+
+	// If there is something to add, add the photos to albums
+	if (len(files) > 0 || len(uploadTokens) > 0) && !dryRun {
+		// Get / create album by albumName
+		if a, err := getAlbum(albumName); err != nil {
+			log.Fatalf("Failed to get album: %v", err)
+		} else {
+			album = a
+		}
+
 		log.Debugf("Adding photos to album %+v", album)
 
 		// We must split the tokens into groups of max MaxAddPhotosPerCall items
@@ -344,12 +346,10 @@ func mustProcessDir(dir string) {
 	}
 
 	// If enabled, recurse into all the subdirectories
-	for _, d := range dirs {
-		if recurse {
+	if recurse {
+		for _, d := range dirs {
 			subDir := filepath.Join(dir, d.Name())
 			mustProcessDir(subDir)
-		} else {
-			log.Debugf("Non-recursive; skipping directory: %v", d.Name())
 		}
 	}
 

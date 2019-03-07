@@ -136,7 +136,7 @@ func (c *Client) AddToAlbum(album *Album, uploadTokens []string) error {
 // If callback parameter is specified,
 // it will get called when data has been submitted.
 // Returns either an upload token or an error.
-func (c *Client) UploadPhoto(path string, album *Album,
+func (c *Client) UploadPhoto(path string,
 	callback func(int64)) (string, error) {
 
 	req, err := util.NewImageUploadRequestFromFile(path, callback)

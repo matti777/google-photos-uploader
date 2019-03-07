@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"mdahlbom/google-photos-uploader/googlephotos/util"
@@ -29,6 +30,10 @@ type appConfiguration struct {
 const (
 	// App configuration file name
 	appConfigFilename = ".photos-uploader.config"
+)
+
+var (
+	albumYearRegex *regexp.Regexp
 )
 
 // Configures the local logger
@@ -219,4 +224,21 @@ func chunked(arr []string, chunkSize int) [][]string {
 	}
 
 	return chunks
+}
+
+// parseAlbumYear tries to parse the year of the album from a string
+// (directory name) using a certain regex pattern (eg. 'Trip to X - 2009')
+// Returns empty string if not found.
+func parseAlbumYear(name string) string {
+	res := albumYearRegex.FindStringSubmatch(name)
+
+	if len(res) == 2 {
+		return res[1]
+	}
+
+	return ""
+}
+
+func init() {
+	albumYearRegex = regexp.MustCompile("^.+[- ]([12]\\d{3})$")
 }

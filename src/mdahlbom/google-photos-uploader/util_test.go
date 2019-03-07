@@ -77,3 +77,35 @@ func TestChunked(t *testing.T) {
 		t.Errorf("Chunk contents incorrect")
 	}
 }
+
+func TestParseAlbumYear(t *testing.T) {
+	res1 := parseAlbumYear("Foo bar - 2008")
+	if res1 != "2008" {
+		t.Errorf("Invalid result")
+	}
+
+	res2 := parseAlbumYear("Does Not Match2011")
+	if res2 != "" {
+		t.Errorf("Invalid result")
+	}
+
+	res3 := parseAlbumYear("This Does Match-2004")
+	if res3 != "2004" {
+		t.Errorf("Invalid result")
+	}
+
+	res4 := parseAlbumYear("ThisAlsoMatches 2001")
+	if res4 != "2001" {
+		t.Errorf("Invalid result")
+	}
+
+	res5 := parseAlbumYear("NOt a valid year - 211")
+	if res5 != "" {
+		t.Errorf("Invalid result")
+	}
+
+	res6 := parseAlbumYear("NOt a valid year either - 0211")
+	if res6 != "" {
+		t.Errorf("Invalid result")
+	}
+}
