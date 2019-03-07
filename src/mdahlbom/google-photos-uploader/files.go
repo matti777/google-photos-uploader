@@ -71,8 +71,11 @@ func mustScanDir(dir string, journal *pb.Journal,
 				continue
 			}
 
-			unaddedUploadTokens = append(unaddedUploadTokens, entry.UploadToken)
-			log.Debugf("Image '%v' uploaded but not added to album", name)
+			if entry.UploadToken != "" {
+				unaddedUploadTokens = append(unaddedUploadTokens,
+					entry.UploadToken)
+				log.Debugf("Image '%v' uploaded but not added to album", name)
+			}
 		}
 
 		if info.IsDir() {
@@ -90,6 +93,8 @@ func mustScanDir(dir string, journal *pb.Journal,
 		}
 	}
 
+	log.Debugf("Directory '%v' scan completed.", dir)
+
 	return files, dirs, unaddedUploadTokens
 }
 
@@ -100,7 +105,7 @@ func getAlbumName(dirName string) string {
 		log.Fatalf("Failed to replace in string: %v", err)
 	}
 
-	log.Debugf("capitalize = %v", capitalize)
+	// log.Debugf("capitalize = %v", capitalize)
 
 	if capitalize {
 		albumName = strings.Title(albumName)
@@ -125,6 +130,12 @@ func getAlbum(name string) (*photos.Album, error) {
 	}
 
 	log.Debugf("Creating missing album: '%v'", name)
+
+	if dryRun {
+		log.Debugf("Dry run enabled; simulating album creation.")
+		uuidv4, _ := uuid.NewRandom()
+		return &photos.Album{ID: uuidv4.String(), Title: name}, nil
+	}
 
 	album, err := photosClient.CreateAlbum(name)
 	if err != nil {
@@ -234,10 +245,18 @@ func uploadAll(dir, dirName string, album *photos.Album, journal *pb.Journal,
 			if err != nil {
 				log.Fatalf("File upload failed: %v", err)
 			} else {
-				log.Debugf("Photo uploaded with token %v", uploadToken)
-				uploadTokens = append(uploadTokens, uploadToken)
-				mustAddJournalEntry(dir, file.Name(), uploadToken,
-					journal, &journalMap)
+				if uploadToken != "" {
+					log.Debugf("Photo uploaded with token %v", uploadToken)
+					uploadTokens = append(uploadTokens, uploadToken)
+				} else {
+					log.Debugf("Uploaded photo didnt receive upload token " +
+						"-- it has already been uploaded with another token.")
+				}
+
+				if !dryRun {
+					mustAddJournalEntry(dir, file.Name(), uploadToken,
+						journal, &journalMap)
+				}
 			}
 		})
 	}
@@ -283,8 +302,6 @@ func mustProcessDir(dir string) {
 		}
 	}
 
-	log.Debugf("Read journal file: %+v", journal)
-
 	// Create a lookup map for faster access
 	journalMap := newJournalMap(journal)
 
@@ -299,27 +316,30 @@ func mustProcessDir(dir string) {
 	// added to this album.
 	uploadTokens = append(uploadTokens, unaddedUploadTokens...)
 
-	// We must split the tokens into groups of max MaxAddPhotosPerCall items
-	chunks := chunked(uploadTokens, photos.MaxAddPhotosPerCall)
-	for _, c := range chunks {
-		// Create n media items at a time in the album
-		if err := photosClient.AddToAlbum(album, c); err != nil {
-			log.Fatalf("Failed to add photos to album: %v", err)
-		}
-	}
-
-	// Update all the journal entries to reflect they were successfully added
-	for _, tok := range uploadTokens {
-		for _, e := range journal.Entries {
-			if e.UploadToken == tok {
-				e.MediaItemCreated = true
-				break
+	if !dryRun {
+		// We must split the tokens into groups of max MaxAddPhotosPerCall items
+		chunks := chunked(uploadTokens, photos.MaxAddPhotosPerCall)
+		for _, c := range chunks {
+			// Create n media items at a time in the album
+			if err := photosClient.AddToAlbum(album, c); err != nil {
+				log.Fatalf("Failed to add photos to album: %v", err)
 			}
 		}
-	}
 
-	// Save the updated journal for this directory
-	mustWriteJournalFile(dir, journal)
+		// Update all the journal entries to reflect they
+		// were successfully added
+		for _, tok := range uploadTokens {
+			for _, e := range journal.Entries {
+				if e.UploadToken == tok {
+					e.MediaItemCreated = true
+					break
+				}
+			}
+		}
+
+		// Save the updated journal for this directory
+		mustWriteJournalFile(dir, journal)
+	}
 
 	// If enabled, recurse into all the subdirectories
 	for _, d := range dirs {

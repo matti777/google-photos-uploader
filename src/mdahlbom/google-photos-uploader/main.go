@@ -253,11 +253,11 @@ func main() {
 				"all dashes, specify -s \"_, ,-, - \"",
 		},
 		cli.BoolTFlag{
-			Name:  "default-substitutions, -ds",
+			Name:  "default-substitutions, u",
 			Usage: "Same as defining -s \"_, ,-, - \"",
 		},
 		cli.BoolTFlag{
-			Name: "no-parse-year, -ny",
+			Name: "no-parse-year",
 			Usage: "Do not attempt to parse the year from the directory " +
 				"name; by default, an attempt is made to extract Photos Folder " +
 				"creation date using regex '.*[\\- _][0-9]{4}'. Eg. " +
