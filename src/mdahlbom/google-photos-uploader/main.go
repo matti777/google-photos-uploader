@@ -131,8 +131,6 @@ func defaultAction(c *cli.Context) error {
 		baseDir = dir
 	}
 
-	log.Debugf("baseDir input: %v", baseDir)
-
 	// Resolve the base dir
 	baseDir, err := filepath.Abs(baseDir)
 	if err != nil {

@@ -75,6 +75,7 @@ func mustScanDir(dir string, journal *pb.Journal,
 				unaddedUploadTokens = append(unaddedUploadTokens,
 					entry.UploadToken)
 				log.Debugf("Image '%v' uploaded but not added to album", name)
+				continue
 			}
 		}
 
@@ -153,8 +154,6 @@ func getAlbum(name string) (*photos.Album, error) {
 func simulateUploadPhoto(path string, size int64, album *photos.Album,
 	callback func(int64)) (string, error) {
 
-	log.Debugf("Simulating uploading file: %v", path)
-
 	const steps = 10
 	const duration = 2.0
 	const sleep = float32(time.Second) * (float32(duration) / steps)
@@ -192,7 +191,7 @@ func simulateUploadPhoto(path string, size int64, album *photos.Album,
 func upload(dir string, file os.FileInfo,
 	padLength int, album *photos.Album) (string, error) {
 
-	log.Debugf("Uploading file '%v'", file.Name())
+	// log.Debugf("Uploading file '%v'", file.Name())
 	paddedName := strutil.PadRight(file.Name(), padLength, ' ')
 
 	bar := uiprogress.AddBar(int(file.Size())).PrependElapsed().
@@ -241,6 +240,7 @@ func uploadAll(dir, dirName string, album *photos.Album, journal *pb.Journal,
 		file := f
 
 		q.Add(func() {
+			// log.Debugf("Uploading file '%v'", file.Name)
 			uploadToken, err := upload(dir, file, padLength, album)
 			if err != nil {
 				log.Fatalf("File upload failed: %v", err)
@@ -317,6 +317,8 @@ func mustProcessDir(dir string) {
 	uploadTokens = append(uploadTokens, unaddedUploadTokens...)
 
 	if !dryRun {
+		log.Debugf("Adding photos to album %+v", album)
+
 		// We must split the tokens into groups of max MaxAddPhotosPerCall items
 		chunks := chunked(uploadTokens, photos.MaxAddPhotosPerCall)
 		for _, c := range chunks {

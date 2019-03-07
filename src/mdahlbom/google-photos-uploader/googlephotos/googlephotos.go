@@ -39,7 +39,7 @@ func NewClient(clientID, clientSecret string,
 		return nil, err
 	}
 
-	return &Client{photosClient: photosClient}, nil
+	return &Client{photosClient: photosClient, httpClient: httpClient}, nil
 }
 
 // ListAlbums Lists all the Albums
@@ -113,13 +113,22 @@ func (c *Client) AddToAlbum(album *Album, uploadTokens []string) error {
 		return err
 	}
 
+	numFailed := 0
+
 	for _, r := range res.NewMediaItemResults {
-		if r.Status.Message != "" {
-			//TODO can we do something about this?
-			fmt.Println("Failed to add a photo to the album")
+		if r.MediaItem == nil {
+			fmt.Printf("Failed to add a photo to the album with token: %v: %v\n",
+				r.UploadToken, r.Status.Message)
+			numFailed++
 		}
 	}
 
+	if numFailed == len(uploadTokens) {
+		// All failed to add
+		return fmt.Errorf("Failed to add all of the photos to album")
+	}
+
+	// At least some photos added successfully
 	return nil
 }
 
