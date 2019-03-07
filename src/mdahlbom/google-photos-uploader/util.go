@@ -240,5 +240,5 @@ func parseAlbumYear(name string) string {
 }
 
 func init() {
-	albumYearRegex = regexp.MustCompile("^.+[- ]([12]\\d{3})$")
+	albumYearRegex = regexp.MustCompile("^.+[-_ ]([12]\\d{3})$")
 }

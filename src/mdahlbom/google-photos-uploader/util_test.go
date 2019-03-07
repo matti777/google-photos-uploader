@@ -108,4 +108,9 @@ func TestParseAlbumYear(t *testing.T) {
 	if res6 != "" {
 		t.Errorf("Invalid result")
 	}
+
+	res7 := parseAlbumYear("öne_möre_match_2020")
+	if res7 != "2020" {
+		t.Errorf("Invalid result")
+	}
 }

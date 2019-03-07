@@ -92,7 +92,7 @@ func readFlags(c *cli.Context) {
 
 	useDefaultSubs := GlobalBoolT(c, "default-substitutions")
 	if useDefaultSubs {
-		nameSubstitutionTokens = "_, ,-, - "
+		nameSubstitutionTokens = "_, "
 	}
 
 	noParseYear = GlobalBoolT(c, "no-parse-year")
@@ -252,7 +252,7 @@ func main() {
 		},
 		cli.BoolTFlag{
 			Name:  "default-substitutions, u",
-			Usage: "Same as defining -s \"_, ,-, - \"",
+			Usage: "Same as defining -s \"_, \"",
 		},
 		cli.BoolTFlag{
 			Name: "no-parse-year",
