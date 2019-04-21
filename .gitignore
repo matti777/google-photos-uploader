@@ -4,7 +4,8 @@
 
 .DS_Store
 photos-uploader
-test
+exiftest
+test_data
 .photos-uploader.journal
 secrets
 offline_doc

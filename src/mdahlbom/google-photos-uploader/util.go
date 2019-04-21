@@ -167,15 +167,14 @@ func findLongestName(infos []os.FileInfo) int {
 	return longest
 }
 
-// There seems to be a bug in the GolbalBoolT API, or I am using
-// it incorrectly - however, this method checks for the presence of a BoolT
+// GlobalBoolT checks for the presence of a BoolT
 // flag and returns false if it is not specified.
 func GlobalBoolT(c *cli.Context, name string) bool {
 	if !c.IsSet(name) {
 		return false
-	} else {
-		return c.GlobalBoolT(name)
 	}
+
+	return c.GlobalBoolT(name)
 }
 
 // Replaces substrings in the string with other strings, using strings.Replacer.
@@ -210,7 +209,7 @@ func chunked(arr []string, chunkSize int) [][]string {
 	arrayLen := len(arr)
 	numChunks := arrayLen / chunkSize
 	if arrayLen%chunkSize > 0 {
-		numChunks += 1
+		numChunks++
 	}
 
 	chunks := make([][]string, 0, numChunks)

@@ -186,10 +186,12 @@ func simulateUploadPhoto(path string, size int64,
 // Synchronously uploads an image file (or simulates it). Manages a progress
 // bar for the upload.
 // Returns image upload token or error.
-func upload(dir string, file os.FileInfo, padLength int) (string, error) {
+func upload(progress *uiprogress.Progress, dir string, file os.FileInfo,
+	padLength int) (string, error) {
+
 	paddedName := strutil.PadRight(file.Name(), padLength, ' ')
 
-	bar := uiprogress.AddBar(int(file.Size())).PrependElapsed().
+	bar := progress.AddBar(int(file.Size())).PrependElapsed().
 		AppendCompleted()
 	bar.PrependFunc(func(b *uiprogress.Bar) string {
 		return paddedName
@@ -227,19 +229,20 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 		log.Fatalf("Failed to create operation queue: %v", err)
 	}
 
-	uiprogress.Start()
+	progress := uiprogress.New()
+	progress.Start()
 
 	// Process the files in this directory firs
 	for _, f := range files {
 		file := f
 
 		q.Add(func() {
-			uploadToken, err := upload(dir, file, padLength)
+			uploadToken, err := upload(progress, dir, file, padLength)
 			if err != nil {
 				log.Fatalf("File upload failed: %v", err)
 			} else {
 				if uploadToken != "" {
-					log.Debugf("Photo uploaded with token %v", uploadToken)
+					// log.Debugf("Photo uploaded with token %v", uploadToken)
 					uploadTokens = append(uploadTokens, uploadToken)
 				} else {
 					log.Debugf("Uploaded photo didn't receive upload token " +
@@ -257,7 +260,8 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 	// Wait for all the operations to complete
 	q.GracefulShutdown()
 	log.Debugf("All uploads finished.")
-	uiprogress.Stop()
+	progress.Stop()
+	progress.Bars = nil
 
 	return uploadTokens
 }

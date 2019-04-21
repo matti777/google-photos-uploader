@@ -73,7 +73,7 @@ func (q *OperationQueue) run(callback func()) {
 	for {
 		op, ok := <-q.bufferChan
 		if !ok {
-			log.Debugf("Channel closed - exiting worker goroutine!")
+			// log.Debugf("Channel closed - exiting worker goroutine!")
 			return
 		}
 		op()
@@ -100,7 +100,8 @@ func (q *OperationQueue) start() {
 	}
 }
 
-// Gracefully shuts down the queue, waiting for all operations to be completed.
+// GracefulShutdown shuts down the queue, waiting for all operations
+// to be completed.
 // No new operations can be Add()ed after this method has been called.
 func (q *OperationQueue) GracefulShutdown() {
 	done := func() bool {
@@ -131,7 +132,7 @@ func (q *OperationQueue) GracefulShutdown() {
 	close(q.bufferChan)
 }
 
-// Adds a new operation to the queue; may block if the buffer is full. If
+// Add adds a new operation to the queue; may block if the buffer is full. If
 // the queue has been shut down, returns errShutdown.
 func (q *OperationQueue) Add(op func()) error {
 	q.lock.Lock()
