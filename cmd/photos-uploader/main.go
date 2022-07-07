@@ -6,103 +6,68 @@ import (
 	"path/filepath"
 	"strings"
 
-	photos "mdahlbom/google-photos-uploader/googlephotos"
-	"mdahlbom/google-photos-uploader/googlephotos/util"
+	"github.com/matti777/google-photos-uploader/internal/config"
+	"github.com/matti777/google-photos-uploader/internal/files"
+	photos "github.com/matti777/google-photos-uploader/internal/googlephotos"
+	photosutil "github.com/matti777/google-photos-uploader/internal/googlephotos/util"
+	"github.com/matti777/google-photos-uploader/internal/logging"
+	"github.com/matti777/google-photos-uploader/internal/util"
 
-	logging "github.com/op/go-logging"
 	"github.com/urfave/cli"
 )
 
-// Our local logger
-var log = logging.MustGetLogger("uploader")
-
 var (
+	log      = logging.MustGetLogger()
+	settings = config.MustGetSettings()
+
 	// Application configuration
-	appConfig *appConfiguration
-
-	// Filename extensions to consider as images
-	imageExtensions = []string{"jpg", "jpeg"}
-
-	// Directory name -> photos folder substitution CSV string; should
-	// be formatted as old1,new1,old2,new2, ... where new1 replaces old1 etc
-	nameSubstitutionTokens = ""
-
-	// Whether to capitalize words in directory name when forming
-	// folder names
-	capitalize = false
-
-	// Whether to skip parsing folder year from the folder name
-	noParseYear = false
-
-	// Whether to skip (assume Yes) all confirmations)
-	skipConfirmation = false
-
-	// Whether doing a 'dry run', ie not actually sending anything.
-	dryRun = false
-
-	// Whether to skip reading journal files
-	disregardJournal = false
-
-	// Whether to recurse into subdirectories
-	recurse = false
-
-	// Maximum concurrency (number of simultaneous uploads)
-	maxConcurrency = 1
-
-	// Google Photos API client
-	photosClient *photos.Client
-
-	// // Feed representing the list of Albums
-	// albumFeed *photos.Feed
-
-	// List of albums
-	albums []*photos.Album
+	appConfig *config.AppConfiguration
 )
 
 func readFlags(c *cli.Context) {
-	disregardJournal = GlobalBoolT(c, "disregard-journal")
-	if disregardJournal {
+	settings.DisregardJournal = util.GlobalBoolT(c, "disregard-journal")
+	if settings.DisregardJournal {
 		log.Debugf("Disregarding reading journal files..")
 	}
 
-	recurse = GlobalBoolT(c, "recursive")
-	log.Debugf("Recurse into subdirectories: %v", recurse)
+	settings.Recurse = util.GlobalBoolT(c, "recursive")
+	log.Debugf("Recurse into subdirectories: %v", settings.Recurse)
 
-	skipConfirmation = GlobalBoolT(c, "yes")
+	settings.SkipConfirmation = util.GlobalBoolT(c, "yes")
 
-	dryRun = GlobalBoolT(c, "dry-run")
-	if dryRun {
-		fmt.Printf("--dry-run enabled, not uploading anything\n")
+	settings.DryRun = util.GlobalBoolT(c, "dry-run")
+	if settings.DryRun {
+		log.Debugf("--dry-run enabled, not uploading anything")
 	}
 
 	exts := c.String("extensions")
 	if exts != "" {
 		s := strings.Split(exts, ",")
-		imageExtensions = make([]string, len(s))
+		settings.ImageExtensions = make([]string, len(s))
 		for i, item := range s {
-			imageExtensions[i] = strings.ToLower(strings.Trim(item, " "))
+			settings.ImageExtensions[i] = strings.ToLower(strings.Trim(item, " "))
 		}
 	}
 
-	log.Debugf("Using image extensions: %v", imageExtensions)
+	log.Debugf("Using image extensions: %v", settings.ImageExtensions)
 
-	nameSubstitutionTokens = c.String("folder-name-substitutions")
+	settings.NameSubstitutionTokens = c.String("folder-name-substitutions")
 	log.Debugf("Using folder name substitution tokens: %v",
-		nameSubstitutionTokens)
+		settings.NameSubstitutionTokens)
 
-	useDefaultSubs := GlobalBoolT(c, "default-substitutions")
+	useDefaultSubs := util.GlobalBoolT(c, "default-substitutions")
 	if useDefaultSubs {
-		nameSubstitutionTokens = "_, "
+		settings.NameSubstitutionTokens = "_, "
 	}
 
-	noParseYear = GlobalBoolT(c, "no-parse-year")
-	log.Debugf("Skipping parsing folder year?: %v", noParseYear)
+	settings.NoParseYear = util.GlobalBoolT(c, "no-parse-year")
+	log.Debugf("Skipping parsing folder year?: %v", settings.NoParseYear)
 
-	capitalize = GlobalBoolT(c, "capitalize")
-	log.Debugf("Capitalizing folder name words: %v", capitalize)
+	settings.Capitalize = util.GlobalBoolT(c, "capitalize")
+	log.Debugf("Capitalizing folder name words: %v", settings.Capitalize)
 
-	maxConcurrency = c.Int("concurrency")
-	log.Debugf("maxConcurrency = %v", maxConcurrency)
+	settings.MaxConcurrency = c.Int("concurrency")
+	log.Debugf("maxConcurrency = %v", settings.MaxConcurrency)
 }
 
 func defaultAction(c *cli.Context) error {
@@ -110,7 +75,7 @@ func defaultAction(c *cli.Context) error {
 
 	readFlags(c)
 
-	authorize := GlobalBoolT(c, "authorize")
+	authorize := util.GlobalBoolT(c, "authorize")
 
 	// Make sure we have an auth token, ie. the user has performed the
 	// authorization flow.
@@ -141,7 +106,7 @@ func defaultAction(c *cli.Context) error {
 	// Check if need to authenticate the user
 	if authorize {
 		log.Debugf("Running authorization flow..")
-		a := util.NewAuthenticator(appConfig.ClientID,
+		a := photosutil.NewAuthenticator(appConfig.ClientID,
 			appConfig.ClientSecret)
 		token, userInfo, err := a.Authorize()
 		if err != nil {
@@ -151,7 +116,7 @@ func defaultAction(c *cli.Context) error {
 			appConfig.AuthToken = token
 			appConfig.UserInfo = *userInfo
 			log.Debugf("UserInfo: %+v", appConfig.UserInfo)
-			mustWriteAppConfig(appConfig)
+			config.MustWriteAppConfig(appConfig)
 		}
 	}
 
@@ -159,43 +124,36 @@ func defaultAction(c *cli.Context) error {
 		"on a different account.\n", appConfig.UserInfo.Name,
 		appConfig.UserInfo.ID)
 
-	// Create the API client
-	photosClient, err = photos.NewClient(appConfig.ClientID,
-		appConfig.ClientSecret, appConfig.AuthToken)
-	if err != nil {
-		return err
-	}
+	photosClient := photos.MustCreateClient(appConfig.ClientID, appConfig.ClientSecret,
+		appConfig.AuthToken)
 
 	// Retrieve the list of albums
 	fmt.Printf("Fetching the list of Photos Albums..\n")
 	if l, err := photosClient.ListAlbums(); err != nil {
 		log.Fatalf("Failed to list Google Photos albums: %v", err)
 	} else {
-		albums = l
+		settings.Albums = l
 	}
 
-	for _, a := range albums {
+	for _, a := range settings.Albums {
 		log.Debugf("Got Photos Album: '%v'", a.Title)
 	}
 
-	mustProcessDir(baseDir)
+	files.MustProcessDir(baseDir)
 
 	return nil
 }
 
 func main() {
-	// Set up logging
-	setupLogging()
-
 	appname := os.Args[0]
 	log.Debugf("main(): running binary %v..", appname)
 
-	appConfig = readAppConfig()
+	appConfig = config.ReadAppConfig()
 	log.Debugf("Read user info: %+v", appConfig.UserInfo)
 	if appConfig.ClientID == "" || appConfig.ClientSecret == "" {
-		appConfig.ClientID, appConfig.ClientSecret = mustReadAppCredentials()
+		appConfig.ClientID, appConfig.ClientSecret = config.MustReadAppCredentials()
 		log.Debugf("Got appConfig from stdin: %+v", appConfig)
-		mustWriteAppConfig(appConfig)
+		config.MustWriteAppConfig(appConfig)
 	}
 
 	// Setup CLI app framework

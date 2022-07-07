@@ -1,6 +1,6 @@
-// +build nodebug
+//go:build nodebug
 
-package main
+package logging
 
 const (
 	enableDebugLogging = false

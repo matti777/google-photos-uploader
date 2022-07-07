@@ -1,5 +1,4 @@
-// Contains methods for dealing with directory journals
-package main
+package files
 
 import (
 	"io/ioutil"
@@ -7,9 +6,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"mdahlbom/google-photos-uploader/pb"
+	"github.com/matti777/google-photos-uploader/internal/pb"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 const (

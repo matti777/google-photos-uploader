@@ -1,4 +1,4 @@
-package main
+package util
 
 import (
 	"strings"
@@ -6,19 +6,19 @@ import (
 )
 
 func TestReplaceInString(t *testing.T) {
-	if r, err := replaceInString("foo_bar", "_, ,\"'\",-"); err != nil {
+	if r, err := ReplaceInString("foo_bar", "_, ,\"'\",-"); err != nil {
 		t.Fatalf("Failed to replace: %v", err)
 	} else if r != "foo bar" {
 		t.Errorf("Replacement incorrect: %v", r)
 	}
 
-	if r, err := replaceInString("foo_bar_baz-2010", "_, ,-, - "); err != nil {
+	if r, err := ReplaceInString("foo_bar_baz-2010", "_, ,-, - "); err != nil {
 		t.Fatalf("Failed to replace: %v", err)
 	} else if r != "foo bar baz - 2010" {
 		t.Errorf("Replacement incorrect: %v", r)
 	}
 
-	if r, err := replaceInString("foo_bar_baz", ""); err != nil {
+	if r, err := ReplaceInString("foo_bar_baz", ""); err != nil {
 		t.Fatalf("Failed to replace: %v", err)
 	} else if r != "foo_bar_baz" {
 		t.Errorf("Replacement incorrect: %v", r)
@@ -52,7 +52,7 @@ func compareArrays(arr1, arr2 []string) bool {
 }
 func TestChunked(t *testing.T) {
 	data1 := []string{"0", "1", "2", "3", "4"}
-	chunked1a := chunked(data1, 2)
+	chunked1a := Chunked(data1, 2)
 	if len(chunked1a) != 3 {
 		t.Errorf("Incorrect amount of chunks")
 	}
@@ -66,7 +66,7 @@ func TestChunked(t *testing.T) {
 		t.Errorf("Chunk contents incorrect")
 	}
 
-	chunked1b := chunked(data1, 4)
+	chunked1b := Chunked(data1, 4)
 	if len(chunked1b) != 2 {
 		t.Errorf("Incorrect amount of chunks")
 	}

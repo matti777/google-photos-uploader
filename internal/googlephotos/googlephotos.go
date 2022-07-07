@@ -5,10 +5,12 @@ package googlephotos
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strings"
+	"sync"
 
-	"mdahlbom/google-photos-uploader/googlephotos/util"
+	"github.com/matti777/google-photos-uploader/internal/googlephotos/util"
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/photoslibrary/v1"
@@ -26,9 +28,14 @@ type Client struct {
 	photosClient *photoslibrary.Service
 }
 
-// NewClient creates a new API client using an OAuth2 token. To acquire the
+var (
+	client     *Client
+	clientOnce sync.Once
+)
+
+// newClient creates a new API client using an OAuth2 token. To acquire the
 // token, run the authorization flow with util.Authenticator.
-func NewClient(clientID, clientSecret string,
+func newClient(clientID, clientSecret string,
 	token *oauth2.Token) (*Client, error) {
 
 	config := util.NewOAuth2Config(clientID, clientSecret)
@@ -40,6 +47,29 @@ func NewClient(clientID, clientSecret string,
 	}
 
 	return &Client{photosClient: photosClient, httpClient: httpClient}, nil
+}
+
+// Returns a cached Photos client
+func MustCreateClient(clientID, clientSecret string, token *oauth2.Token) *Client {
+	clientOnce.Do(func() {
+		var err error
+
+		client, err = newClient(clientID, clientSecret, token)
+		if err != nil {
+			log.Fatal("Failed to create Google Photos client", err)
+		}
+	})
+
+	return client
+}
+
+// Returns a cached, previously created Photos client
+func MustGetClient() *Client {
+	if client == nil {
+		log.Fatalf("Photos client not created")
+	}
+
+	return client
 }
 
 // ListAlbums Lists all the Albums

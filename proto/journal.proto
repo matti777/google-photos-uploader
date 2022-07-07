@@ -1,9 +1,7 @@
 syntax = "proto3";
 
 package uploader;
-option go_package = "mdahlbom/google-photos-uploader/pb";
-
-// import "google/protobuf/timestamp.proto";
+option go_package = "./pb";
 
 message Journal {
     // List of files / subdirectories

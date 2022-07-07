@@ -1,6 +1,4 @@
-// File operations
-
-package main
+package files
 
 import (
 	"os"
@@ -12,8 +10,16 @@ import (
 	"github.com/gosuri/uiprogress"
 	"github.com/gosuri/uiprogress/util/strutil"
 
-	photos "mdahlbom/google-photos-uploader/googlephotos"
-	"mdahlbom/google-photos-uploader/pb"
+	"github.com/matti777/google-photos-uploader/internal/config"
+	photos "github.com/matti777/google-photos-uploader/internal/googlephotos"
+	"github.com/matti777/google-photos-uploader/internal/logging"
+	"github.com/matti777/google-photos-uploader/internal/pb"
+	"github.com/matti777/google-photos-uploader/internal/util"
+)
+
+var (
+	log      = logging.MustGetLogger()
+	settings = config.MustGetSettings()
 )
 
 // Checks that a path is an existing directory
@@ -85,7 +91,7 @@ func mustScanDir(dir string, journal *pb.Journal,
 			ext := filepath.Ext(info.Name())
 			ext = strings.ToLower(strings.TrimLeft(ext, "."))
 
-			for _, e := range imageExtensions {
+			for _, e := range settings.ImageExtensions {
 				if ext == e {
 					files = append(files, info)
 					break
@@ -101,14 +107,14 @@ func mustScanDir(dir string, journal *pb.Journal,
 
 // getAlbumName forms the album name from the directory name
 func getAlbumName(dirName string) string {
-	albumName, err := replaceInString(dirName, nameSubstitutionTokens)
+	albumName, err := util.ReplaceInString(dirName, settings.NameSubstitutionTokens)
 	if err != nil {
 		log.Fatalf("Failed to replace in string: %v", err)
 	}
 
 	// log.Debugf("capitalize = %v", capitalize)
 
-	if capitalize {
+	if settings.Capitalize {
 		albumName = strings.Title(albumName)
 		log.Debugf("Capitalized album name: %v", albumName)
 	}
@@ -120,14 +126,14 @@ func getAlbumName(dirName string) string {
 // getAlbum retrieves the matching existing album by its name or creates
 // a new one if not found
 func getAlbum(name string) (*photos.Album, error) {
-	if dryRun {
+	if settings.DryRun {
 		log.Fatalf("getAlbum called with dryRun enabled")
 	}
 
 	log.Debugf("Looking for album with title '%v'", name)
 
 	// See if an existing album with such name exists
-	for _, a := range albums {
+	for _, a := range settings.Albums {
 		if a.Title == name {
 			log.Debugf("Found album '%v'", name)
 			return a, nil
@@ -136,7 +142,7 @@ func getAlbum(name string) (*photos.Album, error) {
 
 	log.Debugf("Creating missing album: '%v'", name)
 
-	album, err := photosClient.CreateAlbum(name)
+	album, err := photos.MustGetClient().CreateAlbum(name)
 	if err != nil {
 		log.Errorf("Failed to create Photos Album: %v", err)
 		return nil, err
@@ -206,11 +212,11 @@ func upload(progress *uiprogress.Progress, dir string, file os.FileInfo,
 		bar.Set(int(count))
 	}
 
-	if dryRun {
+	if settings.DryRun {
 		return simulateUploadPhoto(filePath, file.Size(), progressCallback)
 	}
 
-	return photosClient.UploadPhoto(filePath, progressCallback)
+	return photos.MustGetClient().UploadPhoto(filePath, progressCallback)
 }
 
 // uploadAll uploads all photos in a given directory. It returns the
@@ -221,10 +227,10 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 	uploadTokens := make([]string, 0, len(files))
 
 	// Calculate the common padding length from the longest filename
-	padLength := findLongestName(files)
+	padLength := util.FindLongestName(files)
 
 	// Create a concurrency execution queue for the uploads
-	q, err := NewOperationQueue(maxConcurrency, 100)
+	q, err := util.NewOperationQueue(settings.MaxConcurrency, 100)
 	if err != nil {
 		log.Fatalf("Failed to create operation queue: %v", err)
 	}
@@ -249,7 +255,7 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 						"-- it has already been uploaded with another token.")
 				}
 
-				if !dryRun {
+				if !settings.DryRun {
 					mustAddJournalEntry(dir, file.Name(), uploadToken,
 						journal, &journalMap)
 				}
@@ -268,7 +274,7 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 
 // Processes all the entries in a single directory. Aborts as soon as
 // an upload fails.
-func mustProcessDir(dir string) {
+func MustProcessDir(dir string) {
 	// Check that the diretory exists
 	if exists, _ := directoryExists(dir); !exists {
 		log.Fatalf("Directory '%v' does not exist!", dir)
@@ -281,7 +287,7 @@ func mustProcessDir(dir string) {
 
 	journal := newEmptyJournal()
 
-	if !disregardJournal {
+	if !settings.DisregardJournal {
 		// Read the journal file of the directory
 		j, err := readJournalFile(dir)
 		if err != nil {
@@ -301,7 +307,7 @@ func mustProcessDir(dir string) {
 
 	if len(files) > 0 {
 		// Ask the user whether to continue uploading to this album
-		mustConfirm("About to upload directory '%v' (%v photos) as album '%v'",
+		util.MustConfirm("About to upload directory '%v' (%v photos) as album '%v'",
 			dirName, len(files), albumName)
 
 		// Upload all the files in this directory
@@ -315,7 +321,7 @@ func mustProcessDir(dir string) {
 	var album *photos.Album
 
 	// If there is something to add, add the photos to albums
-	if (len(files) > 0 || len(uploadTokens) > 0) && !dryRun {
+	if (len(files) > 0 || len(uploadTokens) > 0) && !settings.DryRun {
 		// Get / create album by albumName
 		if a, err := getAlbum(albumName); err != nil {
 			log.Fatalf("Failed to get album: %v", err)
@@ -326,10 +332,10 @@ func mustProcessDir(dir string) {
 		log.Debugf("Adding photos to album %+v", album)
 
 		// We must split the tokens into groups of max MaxAddPhotosPerCall items
-		chunks := chunked(uploadTokens, photos.MaxAddPhotosPerCall)
+		chunks := util.Chunked(uploadTokens, photos.MaxAddPhotosPerCall)
 		for _, c := range chunks {
 			// Create n media items at a time in the album
-			if err := photosClient.AddToAlbum(album, c); err != nil {
+			if err := photos.MustGetClient().AddToAlbum(album, c); err != nil {
 				log.Fatalf("Failed to add photos to album: %v", err)
 			}
 		}
@@ -350,10 +356,10 @@ func mustProcessDir(dir string) {
 	}
 
 	// If enabled, recurse into all the subdirectories
-	if recurse {
+	if settings.Recurse {
 		for _, d := range dirs {
 			subDir := filepath.Join(dir, d.Name())
-			mustProcessDir(subDir)
+			MustProcessDir(subDir)
 		}
 	}
 
