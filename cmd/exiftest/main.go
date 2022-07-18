@@ -27,8 +27,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	outputPath := "/tmp/test.jpg"
+
 	t := time.Date(1987, 4, 26, 0, 0, 0, 0, time.UTC)
-	if err := exif.SetDateIfNone(os.Args[1], t); err != nil {
+	if err := exif.SetImageDate(os.Args[1], t, outputPath); err != nil {
 		log.Fatalf("Failed to set EXIF date: %v", err)
 	}
 

@@ -3,6 +3,7 @@
 package googlephotos
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -35,11 +36,9 @@ var (
 
 // newClient creates a new API client using an OAuth2 token. To acquire the
 // token, run the authorization flow with util.Authenticator.
-func newClient(clientID, clientSecret string,
-	token *oauth2.Token) (*Client, error) {
-
+func newClient(clientID, clientSecret string, token *oauth2.Token) (*Client, error) {
 	config := util.NewOAuth2Config(clientID, clientSecret)
-	httpClient := config.Client(oauth2.NoContext, token)
+	httpClient := config.Client(context.Background(), token)
 
 	photosClient, err := photoslibrary.New(httpClient)
 	if err != nil {

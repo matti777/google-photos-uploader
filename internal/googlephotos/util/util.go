@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	photoslibrary "google.golang.org/api/photoslibrary/v1"
@@ -85,24 +86,24 @@ func GetUserInfo(token *oauth2.Token) (*UserInfo, error) {
 
 	res, err := http.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("Error fetching user information: %v", err)
+		return nil, errors.Wrap(err, "error fetching user information")
 	}
 
 	defer res.Body.Close()
 
 	contents, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to read response body: %v", err)
+		return nil, errors.Wrap(err, "failed to read response body")
 	}
 	// fmt.Printf("Read userinfo contents: %v\n", string(contents))
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return nil, fmt.Errorf("GetUserInfo failed: %v", string(contents))
+		return nil, errors.Errorf("failed to call GetUserInfo: %v", string(contents))
 	}
 
 	info := new(UserInfo)
 	if err := json.Unmarshal(contents, info); err != nil {
-		return nil, fmt.Errorf("Failed to unmarshal JSON: %v", err)
+		return nil, errors.Wrap(err, "failed to unmarshal JSON")
 	}
 	// fmt.Printf("Received UserInfo: %+v\n", info)
 
@@ -118,7 +119,7 @@ func NewImageUploadRequestFromFile(inputFilePath string,
 
 	f, err := os.Open(inputFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to open file: %v", err)
+		return nil, errors.Wrap(err, "failed to open file")
 	}
 
 	reader := &sizeCountingReader{Reader: f, Closer: f,
@@ -126,7 +127,7 @@ func NewImageUploadRequestFromFile(inputFilePath string,
 
 	req, err := http.NewRequest("POST", photoDataUploadURL, reader)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create upload request: %v", err)
+		return nil, errors.Wrap(err, "failed to create upload request")
 	}
 
 	req.Header.Set("Content-Type", "application/octet-stream")

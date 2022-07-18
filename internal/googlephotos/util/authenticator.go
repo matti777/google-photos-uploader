@@ -2,6 +2,7 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
 )
 
@@ -60,7 +62,7 @@ func NewAuthenticator(clientID, clientSecret string) *Authenticator {
 // HTTP handler for the Google's auth callbacks
 func (a *Authenticator) auth(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		a.errCh <- fmt.Errorf("Invalid request")
+		a.errCh <- errors.Wrap(err, "invalid request")
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
@@ -73,7 +75,7 @@ func (a *Authenticator) auth(w http.ResponseWriter, r *http.Request) {
 
 	// Both values must be supplied
 	if state == "" || code == "" {
-		a.errCh <- fmt.Errorf("Missing request parameters")
+		a.errCh <- errors.Errorf("missing request parameters")
 		http.Error(w, "missing values", http.StatusBadRequest)
 		return
 	}
@@ -85,10 +87,12 @@ func (a *Authenticator) auth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TODO check if we could get a refresh token here that we can store and use in future
+
 	// Exchange the authorization code for an access token
-	token, err := a.oauth2Config.Exchange(oauth2.NoContext, code)
+	token, err := a.oauth2Config.Exchange(context.Background(), code)
 	if err != nil {
-		a.errCh <- fmt.Errorf("Code exchange failed: %v", code)
+		a.errCh <- errors.Errorf("code exchange failed: %v", code)
 		http.Error(w, "Code exchange failed", http.StatusInternalServerError)
 		return
 	}
@@ -99,8 +103,7 @@ func (a *Authenticator) auth(w http.ResponseWriter, r *http.Request) {
 	a.ch <- token
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w,
-		"<h1>Authentication successful, you may close this window</h1>")
+	fmt.Fprintln(w, "<h1>Authentication successful, you may close this window</h1>")
 }
 
 // Starts listening to HTTP requests. Returns the listening address:port,
@@ -108,7 +111,7 @@ func (a *Authenticator) auth(w http.ResponseWriter, r *http.Request) {
 func (a *Authenticator) listenToHTTP(pathNonce string) (string, error) {
 	l, err := net.Listen("tcp", "localhost:")
 	if err != nil {
-		return "", fmt.Errorf("Failed to Listen(): %v", err)
+		return "", errors.Wrap(err, "failed to Listen()")
 	}
 
 	r := mux.NewRouter()
@@ -137,8 +140,7 @@ func (a *Authenticator) Authorize() (*oauth2.Token, *UserInfo, error) {
 		return nil, nil, err
 	}
 
-	a.oauth2Config.RedirectURL = fmt.Sprintf("http://%v/auth/%v",
-		addr, nonce)
+	a.oauth2Config.RedirectURL = fmt.Sprintf("http://%v/auth/%v", addr, nonce)
 
 	// Retrieve an URL where the user can authorize this app and open
 	// that URL in a browser
@@ -147,7 +149,7 @@ func (a *Authenticator) Authorize() (*oauth2.Token, *UserInfo, error) {
 	fmt.Printf("If the browser window fails to open, open the following URL "+
 		"manually in your favourite browser:\n\n%v\n\n", url)
 	if err := openBrowser(url); err != nil {
-		return nil, nil, fmt.Errorf("Failed to open web browser: %v", err)
+		return nil, nil, errors.Wrap(err, "failed to open web browser")
 	}
 
 	// Wait for the code on the channel; the HTTP handler will send it
