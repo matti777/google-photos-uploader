@@ -17,6 +17,20 @@ const (
 	tagDateTime         = "DateTime"
 )
 
+func tagHasValue(ifdIb *goexif.IfdBuilder, tagName string) bool {
+	tag, err := ifdIb.FindTagWithName(tagName)
+	if err != nil {
+		return false
+	}
+
+	value := tag.Value()
+	if value == nil {
+		return false
+	}
+
+	return value.String() != ""
+}
+
 // Sets the EXIF DateTime to the given Time unless it has
 // already been defined.
 func SetImageDate(filepath string, t time.Time, outputPath string) error {
@@ -41,12 +55,16 @@ func SetImageDate(filepath string, t time.Time, outputPath string) error {
 		return errors.Wrap(err, "Failed to get or create ib")
 	}
 
-	if err := ifdIb.SetStandardWithName(tagDateTime, t); err != nil {
-		return errors.Wrap(err, "failed to set DateTime tag value")
+	if !tagHasValue(ifdIb, tagDateTime) {
+		if err := ifdIb.SetStandardWithName(tagDateTime, t); err != nil {
+			return errors.Wrap(err, "failed to set DateTime tag value")
+		}
 	}
 
-	if err := ifdIb.SetStandardWithName(tagDateTimeOriginal, t); err != nil {
-		return errors.Wrap(err, "failed to set DateTimeOriginal tag value")
+	if !tagHasValue(ifdIb, tagDateTimeOriginal) {
+		if err := ifdIb.SetStandardWithName(tagDateTimeOriginal, t); err != nil {
+			return errors.Wrap(err, "failed to set DateTimeOriginal tag value")
+		}
 	}
 
 	// Update the exif segment.
