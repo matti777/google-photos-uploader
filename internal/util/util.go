@@ -105,10 +105,10 @@ func Chunked(arr []string, chunkSize int) [][]string {
 	return chunks
 }
 
-// parseAlbumYear tries to parse the year of the album from a string
+// ParseAlbumYear tries to parse the year of the album from a string
 // (directory name) using a certain regex pattern (eg. 'Trip to X - 2009')
 // Returns empty string if not found.
-func parseAlbumYear(name string) string {
+func ParseAlbumYear(name string) string {
 	res := albumYearRegex.FindStringSubmatch(name)
 
 	if len(res) == 2 {

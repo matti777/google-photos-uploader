@@ -10,11 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var (
-	// Our local logger
-	log *logrus.Logger
-)
-
 // Build me like so:
 // go build github.com/matti777/google-photos-uploader/cmd/exiftest
 
@@ -30,7 +25,7 @@ func main() {
 	outputPath := "/tmp/test.jpg"
 
 	t := time.Date(1987, 4, 26, 0, 0, 0, 0, time.UTC)
-	if err := exif.SetImageDate(os.Args[1], t, outputPath); err != nil {
+	if _, err := exif.WriteImageDate(os.Args[1], t, outputPath); err != nil {
 		log.Fatalf("Failed to set EXIF date: %v", err)
 	}
 

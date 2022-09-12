@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/matti777/google-photos-uploader/internal/config"
 	"github.com/matti777/google-photos-uploader/internal/files"
@@ -25,9 +24,9 @@ var (
 )
 
 func readFlags(c *cli.Context) {
-	settings.DisregardJournal = util.GlobalBoolT(c, "disregard-journal")
-	if settings.DisregardJournal {
-		log.Debugf("Disregarding reading journal files..")
+	settings.FlushJournal = util.GlobalBoolT(c, "flush-journal")
+	if settings.FlushJournal {
+		log.Debugf("Skipping reading journal files..")
 	}
 
 	settings.Recurse = util.GlobalBoolT(c, "recursive")
@@ -40,16 +39,15 @@ func readFlags(c *cli.Context) {
 		log.Debugf("--dry-run enabled, not uploading anything")
 	}
 
-	exts := c.String("extensions")
-	if exts != "" {
-		s := strings.Split(exts, ",")
-		settings.ImageExtensions = make([]string, len(s))
-		for i, item := range s {
-			settings.ImageExtensions[i] = strings.ToLower(strings.Trim(item, " "))
-		}
-	}
-
-	log.Debugf("Using image extensions: %v", settings.ImageExtensions)
+	// TODO: support other types than JPEG?
+	// exts := c.String("extensions")
+	// if exts != "" {
+	// 	s := strings.Split(exts, ",")
+	// 	settings.ImageExtensions = make([]string, len(s))
+	// 	for i, item := range s {
+	// 		settings.ImageExtensions[i] = strings.ToLower(strings.Trim(item, " "))
+	// 	}
+	// }
 
 	settings.NameSubstitutionTokens = c.String("folder-name-substitutions")
 	log.Debugf("Using folder name substitution tokens: %v",
@@ -76,6 +74,18 @@ func defaultAction(c *cli.Context) error {
 	readFlags(c)
 
 	authorize := util.GlobalBoolT(c, "authorize")
+	saveCredentials := util.GlobalBoolT(c, "save-credentials")
+
+	appConfig = config.ReadAppConfig()
+	log.Debugf("Read user info: %+v", appConfig.UserInfo)
+	if appConfig.ClientID == "" || appConfig.ClientSecret == "" {
+		appConfig.ClientID, appConfig.ClientSecret = config.MustReadAppCredentials()
+		log.Debugf("Got appConfig from stdin: %+v", appConfig)
+
+		if saveCredentials {
+			config.MustWriteAppConfig(appConfig)
+		}
+	}
 
 	// Make sure we have an auth token, ie. the user has performed the
 	// authorization flow.
@@ -83,7 +93,7 @@ func defaultAction(c *cli.Context) error {
 		!authorize {
 		fmt.Printf("Not authorized; you must perform the authorization " +
 			"flow. Run again and specify the --authorize flag.")
-		return fmt.Errorf("Missing authorization")
+		return fmt.Errorf("missing authorization")
 	}
 
 	baseDir := c.Args().Get(0)
@@ -136,10 +146,12 @@ func defaultAction(c *cli.Context) error {
 	}
 
 	for _, a := range settings.Albums {
-		log.Debugf("Got Photos Album: '%v'", a.Title)
+		log.Debugf("Found existing Photos Album: '%v'", a.Title)
 	}
 
-	files.MustProcessDir(baseDir)
+	fmt.Printf("Will look for images with file extensions: %v\n", settings.ImageExtensions)
+
+	files.MustProcessDir(baseDir, true)
 
 	return nil
 }
@@ -147,14 +159,6 @@ func defaultAction(c *cli.Context) error {
 func main() {
 	appname := os.Args[0]
 	log.Debugf("main(): running binary %v..", appname)
-
-	appConfig = config.ReadAppConfig()
-	log.Debugf("Read user info: %+v", appConfig.UserInfo)
-	if appConfig.ClientID == "" || appConfig.ClientSecret == "" {
-		appConfig.ClientID, appConfig.ClientSecret = config.MustReadAppCredentials()
-		log.Debugf("Got appConfig from stdin: %+v", appConfig)
-		config.MustWriteAppConfig(appConfig)
-	}
 
 	// Setup CLI app framework
 	app := cli.NewApp()
@@ -171,6 +175,11 @@ func main() {
 	app.Action = defaultAction
 	app.Flags = []cli.Flag{
 		cli.BoolTFlag{
+			Name: "save-credentials",
+			Usage: "Allow the application to store the app credentials into the " +
+				"user's home directory.",
+		},
+		cli.BoolTFlag{
 			Name: "authorize",
 			Usage: "Trigger Google authorization flow. " +
 				"You only have to run this one time; " +
@@ -179,8 +188,8 @@ func main() {
 				"account, simply define this flag again.",
 		},
 		cli.BoolTFlag{
-			Name:  "disregard-journal, d",
-			Usage: "Disregard reading journal files; re-upload everything",
+			Name:  "flush-journal, f",
+			Usage: "Skip reading journal files for files already uploaded; re-upload everything",
 		},
 		cli.BoolTFlag{
 			Name:  "recursive, r",

@@ -18,7 +18,8 @@ type Settings struct {
 	// folder names
 	Capitalize bool
 
-	// Whether to skip parsing folder year from the folder name
+	// Whether to skip parsing folder year from the folder name; in this case,
+	// file date will be used as the EXIF date.
 	NoParseYear bool
 
 	// Whether to skip (assume Yes) all confirmations)
@@ -28,7 +29,7 @@ type Settings struct {
 	DryRun bool
 
 	// Whether to skip reading journal files
-	DisregardJournal bool
+	FlushJournal bool
 
 	// Whether to recurse into subdirectories
 	Recurse bool
@@ -55,7 +56,7 @@ func MustGetSettings() *Settings {
 			NoParseYear:            false,
 			SkipConfirmation:       false,
 			DryRun:                 false,
-			DisregardJournal:       false,
+			FlushJournal:           false,
 			Recurse:                false,
 			MaxConcurrency:         1,
 		}

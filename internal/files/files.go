@@ -1,8 +1,11 @@
 package files
 
 import (
+	"io/fs"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,6 +14,7 @@ import (
 	"github.com/gosuri/uiprogress/util/strutil"
 
 	"github.com/matti777/google-photos-uploader/internal/config"
+	"github.com/matti777/google-photos-uploader/internal/exif"
 	photos "github.com/matti777/google-photos-uploader/internal/googlephotos"
 	"github.com/matti777/google-photos-uploader/internal/logging"
 	"github.com/matti777/google-photos-uploader/internal/pb"
@@ -18,8 +22,9 @@ import (
 )
 
 var (
-	log      = logging.MustGetLogger()
-	settings = config.MustGetSettings()
+	log            = logging.MustGetLogger()
+	settings       = config.MustGetSettings()
+	utcLocation, _ = time.LoadLocation("UTC")
 )
 
 // Checks that a path is an existing directory
@@ -115,6 +120,7 @@ func getAlbumName(dirName string) string {
 	// log.Debugf("capitalize = %v", capitalize)
 
 	if settings.Capitalize {
+		// TODO fix deprecation
 		albumName = strings.Title(albumName)
 		log.Debugf("Capitalized album name: %v", albumName)
 	}
@@ -193,11 +199,28 @@ func simulateUploadPhoto(path string, size int64,
 // bar for the upload.
 // Returns image upload token or error.
 func upload(progress *uiprogress.Progress, dir string, file os.FileInfo,
-	padLength int) (string, error) {
+	padLength, parsedAlbumYear int) (string, error) {
 
 	paddedName := strutil.PadRight(file.Name(), padLength, ' ')
 
-	bar := progress.AddBar(int(file.Size())).PrependElapsed().
+	filePath := filepath.Join(dir, file.Name())
+	fileSize := file.Size()
+
+	if !settings.DryRun {
+		// Write creation date to EXIF data so Google Photos album will get a proper year
+		tempFile, err := ioutil.TempFile("", "*.jpeg")
+		if err != nil {
+			log.Fatalf("failed to create temp file: %v", err)
+		}
+		fileDate := getDateForFile(parsedAlbumYear, file)
+		fileSize, err = exif.WriteImageDate(filePath, fileDate, tempFile.Name())
+		if err != nil {
+			log.Fatalf("failed to write EXIF info: %v", err)
+		}
+		filePath = tempFile.Name()
+	}
+
+	bar := progress.AddBar(int(fileSize)).PrependElapsed().
 		AppendCompleted()
 	bar.PrependFunc(func(b *uiprogress.Bar) string {
 		return paddedName
@@ -206,17 +229,24 @@ func upload(progress *uiprogress.Progress, dir string, file os.FileInfo,
 	bar.Head = '#'
 	bar.Empty = ' '
 
-	filePath := filepath.Join(dir, file.Name())
-
 	progressCallback := func(count int64) {
 		bar.Set(int(count))
 	}
 
-	if settings.DryRun {
+	if !settings.DryRun {
+		return photos.MustGetClient().UploadPhoto(filePath, progressCallback)
+	} else {
 		return simulateUploadPhoto(filePath, file.Size(), progressCallback)
 	}
 
-	return photos.MustGetClient().UploadPhoto(filePath, progressCallback)
+}
+
+func getDateForFile(albumYear int, file fs.FileInfo) time.Time {
+	if albumYear != 0 {
+		return time.Date(albumYear, 1, 10, 10, 10, 10, 0, utcLocation)
+	}
+
+	return file.ModTime()
 }
 
 // uploadAll uploads all photos in a given directory. It returns the
@@ -225,6 +255,19 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 	journalMap map[string]*pb.JournalEntry, files []os.FileInfo) []string {
 
 	uploadTokens := make([]string, 0, len(files))
+
+	parsedAlbumYear := 0
+	if !settings.NoParseYear {
+		yearStr := util.ParseAlbumYear(dirName)
+		if yearStr != "" {
+			y, err := strconv.Atoi(yearStr)
+			if err != nil {
+				log.Fatalf("failed to parse year string %v to int", yearStr)
+			}
+
+			parsedAlbumYear = y
+		}
+	}
 
 	// Calculate the common padding length from the longest filename
 	padLength := util.FindLongestName(files)
@@ -243,7 +286,7 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 		file := f
 
 		q.Add(func() {
-			uploadToken, err := upload(progress, dir, file, padLength)
+			uploadToken, err := upload(progress, dir, file, padLength, parsedAlbumYear)
 			if err != nil {
 				log.Fatalf("File upload failed: %v", err)
 			} else {
@@ -274,20 +317,21 @@ func uploadAll(dir, dirName string, journal *pb.Journal,
 
 // Processes all the entries in a single directory. Aborts as soon as
 // an upload fails.
-func MustProcessDir(dir string) {
+func MustProcessDir(dir string, isBaseDir bool) {
 	// Check that the diretory exists
 	if exists, _ := directoryExists(dir); !exists {
 		log.Fatalf("Directory '%v' does not exist!", dir)
 	}
 
-	log.Debugf("Processing directory %v ..", dir)
-
 	dirName := filepath.Base(dir)
 	albumName := getAlbumName(dirName)
 
+	log.Debugf("Processing directory %v with name %v, albym name: %v..",
+		dir, dirName, albumName)
+
 	journal := newEmptyJournal()
 
-	if !settings.DisregardJournal {
+	if !settings.FlushJournal {
 		// Read the journal file of the directory
 		j, err := readJournalFile(dir)
 		if err != nil {
@@ -355,11 +399,10 @@ func MustProcessDir(dir string) {
 		mustWriteJournalFile(dir, journal)
 	}
 
-	// If enabled, recurse into all the subdirectories
-	if settings.Recurse {
+	if !isBaseDir && settings.Recurse {
 		for _, d := range dirs {
 			subDir := filepath.Join(dir, d.Name())
-			MustProcessDir(subDir)
+			MustProcessDir(subDir, false)
 		}
 	}
 

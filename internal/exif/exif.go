@@ -33,11 +33,12 @@ func tagHasValue(ifdIb *goexif.IfdBuilder, tagName string) bool {
 
 // Sets the EXIF DateTime to the given Time unless it has
 // already been defined.
-func SetImageDate(filepath string, t time.Time, outputPath string) error {
+// Returns the number of bytes written to outputPath or error.
+func WriteImageDate(filepath string, t time.Time, outputPath string) (int64, error) {
 	parser := jpeg.NewJpegMediaParser()
 	mediaCtx, err := parser.ParseFile(filepath)
 	if err != nil {
-		return fmt.Errorf("failed to parse JPEG file: %v", err)
+		return 0, errors.Errorf("failed to parse JPEG file: %v", err)
 	}
 
 	sl := mediaCtx.(*jpeg.SegmentList)
@@ -45,47 +46,48 @@ func SetImageDate(filepath string, t time.Time, outputPath string) error {
 	rootIb, err := sl.ConstructExifBuilder()
 	if err != nil {
 		// log.Printf("No EXIF data, creating it from scratch: %v", err)
-		return errors.Wrap(err, "Failed to construct EXIF builder")
+		return 0, errors.Wrap(err, "Failed to construct EXIF builder")
 	}
 
 	ifdPath := "IFD0"
 
 	ifdIb, err := goexif.GetOrCreateIbFromRootIb(rootIb, ifdPath)
 	if err != nil {
-		return errors.Wrap(err, "Failed to get or create ib")
+		return 0, errors.Wrap(err, "Failed to get or create ib")
 	}
 
 	if !tagHasValue(ifdIb, tagDateTime) {
 		if err := ifdIb.SetStandardWithName(tagDateTime, t); err != nil {
-			return errors.Wrap(err, "failed to set DateTime tag value")
+			return 0, errors.Wrap(err, "failed to set DateTime tag value")
 		}
 	}
 
 	if !tagHasValue(ifdIb, tagDateTimeOriginal) {
 		if err := ifdIb.SetStandardWithName(tagDateTimeOriginal, t); err != nil {
-			return errors.Wrap(err, "failed to set DateTimeOriginal tag value")
+			return 0, errors.Wrap(err, "failed to set DateTimeOriginal tag value")
 		}
 	}
 
 	// Update the exif segment.
 	if err := sl.SetExif(rootIb); err != nil {
-		return errors.Wrap(err, "failed to set EXIF to jpeg")
+		return 0, errors.Wrap(err, "failed to set EXIF to jpeg")
 	}
 
 	// Write the modified file
 	b := new(bytes.Buffer)
 	if err := sl.Write(b); err != nil {
-		return errors.Wrap(err, "failed to write JPEG data")
+		return 0, errors.Wrap(err, "failed to write JPEG data")
 	}
 
 	fmt.Printf("Number of image bytes: %v\n", len(b.Bytes()))
 
 	// Save the file
-	if err := ioutil.WriteFile(outputPath, b.Bytes(), 0644); err != nil {
-		return errors.Wrap(err, "failed to write JPEG file")
+	bytes := b.Bytes()
+	if err := ioutil.WriteFile(outputPath, bytes, 0644); err != nil {
+		return 0, errors.Wrap(err, "failed to write JPEG file")
 	}
 
 	fmt.Printf("Wrote %v\n", outputPath)
 
-	return nil
+	return int64(len(bytes)), nil
 }
