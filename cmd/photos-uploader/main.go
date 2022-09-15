@@ -24,11 +24,6 @@ var (
 )
 
 func readFlags(c *cli.Context) {
-	settings.FlushJournal = util.GlobalBoolT(c, "flush-journal")
-	if settings.FlushJournal {
-		log.Debugf("Skipping reading journal files..")
-	}
-
 	settings.Recurse = util.GlobalBoolT(c, "recursive")
 	log.Debugf("Recurse into subdirectories: %v", settings.Recurse)
 
@@ -38,16 +33,6 @@ func readFlags(c *cli.Context) {
 	if settings.DryRun {
 		log.Debugf("--dry-run enabled, not uploading anything")
 	}
-
-	// TODO: support other types than JPEG?
-	// exts := c.String("extensions")
-	// if exts != "" {
-	// 	s := strings.Split(exts, ",")
-	// 	settings.ImageExtensions = make([]string, len(s))
-	// 	for i, item := range s {
-	// 		settings.ImageExtensions[i] = strings.ToLower(strings.Trim(item, " "))
-	// 	}
-	// }
 
 	settings.NameSubstitutionTokens = c.String("folder-name-substitutions")
 	log.Debugf("Using folder name substitution tokens: %v",
@@ -151,7 +136,7 @@ func defaultAction(c *cli.Context) error {
 
 	fmt.Printf("Will look for images with file extensions: %v\n", settings.ImageExtensions)
 
-	files.MustProcessDir(baseDir, true)
+	files.ProcessBaseDir(baseDir)
 
 	return nil
 }

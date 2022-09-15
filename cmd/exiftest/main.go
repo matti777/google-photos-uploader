@@ -10,9 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Build me like so:
-// go build github.com/matti777/google-photos-uploader/cmd/exiftest
-
 func main() {
 	log := logrus.New()
 	log.SetOutput(os.Stdout)

@@ -28,9 +28,6 @@ type Settings struct {
 	// Whether doing a 'dry run', ie not actually sending anything.
 	DryRun bool
 
-	// Whether to skip reading journal files
-	FlushJournal bool
-
 	// Whether to recurse into subdirectories
 	Recurse bool
 
@@ -56,11 +53,23 @@ func MustGetSettings() *Settings {
 			NoParseYear:            false,
 			SkipConfirmation:       false,
 			DryRun:                 false,
-			FlushJournal:           false,
 			Recurse:                false,
 			MaxConcurrency:         1,
 		}
 	})
 
 	return settings
+}
+
+func (s *Settings) FindAlbum(name string) *photos.Album {
+	log.Debugf("Trying to find existing album with name '%v'", name)
+
+	for _, a := range s.Albums {
+		if a.Title == name {
+			log.Debugf("Found album '%v'", name)
+			return a
+		}
+	}
+
+	return nil
 }
