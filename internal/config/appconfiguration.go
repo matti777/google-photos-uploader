@@ -17,8 +17,8 @@ import (
 
 // Application configuration file structure
 type AppConfiguration struct {
-	ClientID     string              `json:"clientId"`
-	ClientSecret string              `json:"clientSecret"`
+	ClientID     string              `json:"-"`
+	ClientSecret string              `json:"-"`
 	AuthToken    *oauth2.Token       `json:"authToken"`
 	UserInfo     photosutil.UserInfo `json:"userInfo"`
 }

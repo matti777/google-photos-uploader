@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/matti777/google-photos-uploader/internal/config"
 	"github.com/matti777/google-photos-uploader/internal/files"
@@ -31,16 +33,13 @@ func readFlags(c *cli.Context) {
 
 	settings.DryRun = util.GlobalBoolT(c, "dry-run")
 	if settings.DryRun {
-		log.Debugf("--dry-run enabled, not uploading anything")
+		log.Debugf("--dry-run enabled, not changes will be made")
 	}
 
 	settings.NameSubstitutionTokens = c.String("folder-name-substitutions")
-	log.Debugf("Using folder name substitution tokens: %v",
-		settings.NameSubstitutionTokens)
-
-	useDefaultSubs := util.GlobalBoolT(c, "default-substitutions")
-	if useDefaultSubs {
-		settings.NameSubstitutionTokens = "_, "
+	if settings.NameSubstitutionTokens != "" {
+		log.Debugf("Using folder name substitution tokens: %v",
+			settings.NameSubstitutionTokens)
 	}
 
 	settings.NoParseYear = util.GlobalBoolT(c, "no-parse-year")
@@ -59,21 +58,15 @@ func defaultAction(c *cli.Context) error {
 	readFlags(c)
 
 	authorize := util.GlobalBoolT(c, "authorize")
-	saveCredentials := util.GlobalBoolT(c, "save-credentials")
 
 	appConfig = config.ReadAppConfig()
-	log.Debugf("Read user info: %+v", appConfig.UserInfo)
-	if appConfig.ClientID == "" || appConfig.ClientSecret == "" {
-		appConfig.ClientID, appConfig.ClientSecret = config.MustReadAppCredentials()
-		log.Debugf("Got appConfig from stdin: %+v", appConfig)
+	// log.Debugf("Read user info: %+v", appConfig.UserInfo)
 
-		if saveCredentials {
-			config.MustWriteAppConfig(appConfig)
-		}
-	}
+	appConfig.ClientID, appConfig.ClientSecret = config.MustReadAppCredentials()
+	log.Debugf("Got appConfig from stdin: %+v", appConfig)
 
-	// Make sure we have an auth token, ie. the user has performed the
-	// authorization flow.
+	// Check that we have an auth token, ie. the user has performed the
+	// authorization flow. If not, the user must perform the authorization flow.
 	if (appConfig.AuthToken == nil || appConfig.UserInfo.ID == "") &&
 		!authorize {
 		fmt.Printf("Not authorized; you must perform the authorization " +
@@ -119,6 +112,15 @@ func defaultAction(c *cli.Context) error {
 		"on a different account.\n", appConfig.UserInfo.Name,
 		appConfig.UserInfo.ID)
 
+	fmt.Printf("You have authenticated as %v (%v). Continue? [y/N]\n",
+		appConfig.UserInfo.Name, appConfig.UserInfo.Email)
+	reader := bufio.NewReader(os.Stdin)
+	res, _ := reader.ReadString('\n')
+	if strings.ToLower(strings.Trim(res, " \n\t\r")) != "y" {
+		fmt.Print("Re-run with --authorize to re-authorize as a different user.")
+		return nil
+	}
+
 	photosClient := photos.MustCreateClient(appConfig.ClientID, appConfig.ClientSecret,
 		appConfig.AuthToken)
 
@@ -160,11 +162,6 @@ func main() {
 	app.Action = defaultAction
 	app.Flags = []cli.Flag{
 		cli.BoolTFlag{
-			Name: "save-credentials",
-			Usage: "Allow the application to store the app credentials into the " +
-				"user's home directory.",
-		},
-		cli.BoolTFlag{
 			Name: "authorize",
 			Usage: "Trigger Google authorization flow. " +
 				"You only have to run this one time; " +
@@ -201,10 +198,6 @@ func main() {
 				"new1 would replace token old1 etc. For example to replace " +
 				"all underscores with spaces and add spaces around " +
 				"all dashes, specify -s \"_, ,-, - \"",
-		},
-		cli.BoolTFlag{
-			Name:  "default-substitutions, u",
-			Usage: "Same as defining -s \"_, \"",
 		},
 		cli.BoolTFlag{
 			Name: "no-parse-year",

@@ -72,13 +72,13 @@ func mustScanDirectory(dir string) ([]os.FileInfo, []os.FileInfo) {
 }
 
 // formAlbumName forms the album name from the directory name
-func formAlbumName(dirName string) string {
-	albumName, err := util.ReplaceInString(dirName, settings.NameSubstitutionTokens)
+func formAlbumName(dirName string, capitalize bool, substitutionTokens string) string {
+	albumName, err := util.ReplaceInString(dirName, substitutionTokens)
 	if err != nil {
 		log.Fatalf("Failed to replace in string: %v", err)
 	}
 
-	if settings.Capitalize {
+	if capitalize {
 		// TODO fix deprecation
 		albumName = strings.Title(albumName)
 		log.Debugf("Capitalized album name: %v", albumName)
@@ -225,7 +225,6 @@ func uploadAll(dir, dirName string, files []os.FileInfo) []string {
 	progress := uiprogress.New()
 	progress.Start()
 
-	// Process the files in this directory firs
 	for _, f := range files {
 		file := f
 
@@ -258,11 +257,11 @@ func uploadAll(dir, dirName string, files []os.FileInfo) []string {
 func mustProcessPhotosDirectory(dir string) {
 	// Check that the diretory exists
 	if exists, _ := directoryExists(dir); !exists {
-		log.Fatalf("Directory '%v' does not exist!", dir)
+		log.Fatalf("directory '%v' does not exist!", dir)
 	}
 
 	dirName := filepath.Base(dir)
-	albumName := formAlbumName(dirName)
+	albumName := formAlbumName(dirName, settings.Capitalize, settings.NameSubstitutionTokens)
 
 	log.Debugf("Processing directory %v with name %v, album name: %v..",
 		dir, dirName, albumName)
@@ -289,7 +288,7 @@ func mustProcessPhotosDirectory(dir string) {
 	}
 
 	// If there is something to add, add the photos to albums
-	if len(uploadTokens) > 0 && !settings.DryRun {
+	if len(uploadTokens) > 0 {
 		// Get / create album by albumName
 		album, err := createAlbum(albumName)
 		if err != nil {
@@ -298,12 +297,14 @@ func mustProcessPhotosDirectory(dir string) {
 
 		log.Debugf("Adding %v photos to album %+v", len(uploadTokens), albumName)
 
-		// We must split the tokens into groups of max MaxAddPhotosPerCall items
-		chunks := util.Chunked(uploadTokens, photos.MaxAddPhotosPerCall)
-		for _, c := range chunks {
-			// Create n media items at a time in the album
-			if err := photos.MustGetClient().AddToAlbum(album, c); err != nil {
-				log.Fatalf("failed to add photos to album: %v", err)
+		if !settings.DryRun {
+			// We must split the tokens into groups of max MaxAddPhotosPerCall items
+			chunks := util.Chunked(uploadTokens, photos.MaxAddPhotosPerCall)
+			for _, c := range chunks {
+				// Create n media items at a time in the album
+				if err := photos.MustGetClient().AddToAlbum(album, c); err != nil {
+					log.Fatalf("failed to add photos to album: %v", err)
+				}
 			}
 		}
 	}

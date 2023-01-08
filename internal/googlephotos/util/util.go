@@ -17,7 +17,7 @@ import (
 
 const (
 	// Google's user info endpoint URL
-	userInfoEndpointURLFmt = "https://www.googleapis.com/oauth2/v2/userinfo" +
+	userInfoEndpointURLFmt = "https://www.googleapis.com/oauth2/v3/userinfo" +
 		"?access_token=%v"
 
 	// URL to upload photo data
@@ -31,6 +31,7 @@ type UserInfo struct {
 	Name      string `json:"name"`
 	GivenName string `json:"given_name"`
 	LastName  string `json:"family_name"`
+	Email     string `json:"email"`
 }
 
 // Wraps io.Reader (and io.Closer) so that it counts the bytes read.
@@ -95,7 +96,7 @@ func GetUserInfo(token *oauth2.Token) (*UserInfo, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read response body")
 	}
-	// fmt.Printf("Read userinfo contents: %v\n", string(contents))
+	fmt.Printf("Read userinfo contents: %v\n", string(contents))
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return nil, errors.Errorf("failed to call GetUserInfo: %v", string(contents))
