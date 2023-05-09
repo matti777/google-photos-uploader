@@ -79,38 +79,41 @@ func TestChunked(t *testing.T) {
 }
 
 func TestParseAlbumYear(t *testing.T) {
-	res1 := ParseAlbumYear("Foo bar - 2008")
-	if res1 != "2008" {
-		t.Errorf("Invalid result")
+	var year int
+	var err error
+
+	year, err = ParseAlbumYear("Foo bar - 2008")
+	if err != nil || year != 2008 {
+		t.Errorf("failed to parse album year")
 	}
 
-	res2 := ParseAlbumYear("Does Not Match2011")
-	if res2 != "" {
-		t.Errorf("Invalid result")
+	_, err = ParseAlbumYear("Does Not Match2011")
+	if err == nil {
+		t.Errorf("should have failed to parse album year")
 	}
 
-	res3 := ParseAlbumYear("This Does Match-2004")
-	if res3 != "2004" {
-		t.Errorf("Invalid result")
+	year, err = ParseAlbumYear("This Does Match-2004")
+	if err != nil || year != 2004 {
+		t.Errorf("failed to parse album year")
 	}
 
-	res4 := ParseAlbumYear("ThisAlsoMatches 2001")
-	if res4 != "2001" {
-		t.Errorf("Invalid result")
+	year, err = ParseAlbumYear("ThisAlsoMatches 2001")
+	if err != nil || year != 2001 {
+		t.Errorf("failed to parse album year")
 	}
 
-	res5 := ParseAlbumYear("NOt a valid year - 211")
-	if res5 != "" {
-		t.Errorf("Invalid result")
+	_, err = ParseAlbumYear("Not a valid year - 211")
+	if err == nil {
+		t.Errorf("shoulda have failed to parse album year")
 	}
 
-	res6 := ParseAlbumYear("NOt a valid year either - 0211")
-	if res6 != "" {
-		t.Errorf("Invalid result")
+	_, err = ParseAlbumYear("Not a valid year either - 0211")
+	if err == nil {
+		t.Errorf("should have failed to parse album year")
 	}
 
-	res7 := ParseAlbumYear("öne_möre_match_2020")
-	if res7 != "2020" {
-		t.Errorf("Invalid result")
+	year, err = ParseAlbumYear("öne_möre_match_2020")
+	if err != nil || year != 2020 {
+		t.Errorf("failed to parse album year")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -21,6 +22,10 @@ var (
 	settings = config.MustGetSettings()
 
 	albumYearRegex *regexp.Regexp
+)
+
+var (
+	ErrCouldNotParseYear = errors.Errorf("failed to parse the album year")
 )
 
 // Asks the user interactively a confirmation question; if the user declines
@@ -107,17 +112,27 @@ func Chunked(arr []string, chunkSize int) [][]string {
 
 // ParseAlbumYear tries to parse the year of the album from a string
 // (directory name) using a certain regex pattern (eg. 'Trip to X - 2009')
-// Returns empty string if not found.
-func ParseAlbumYear(name string) string {
-	res := albumYearRegex.FindStringSubmatch(name)
+// Returns ErrCouldNotParseYear if not found.
+func ParseAlbumYear(dirName string) (int, error) {
+	res := albumYearRegex.FindStringSubmatch(dirName)
 
-	if len(res) == 2 {
-		return res[1]
+	if len(res) != 2 {
+		return 0, ErrCouldNotParseYear
 	}
 
-	return ""
+	if res[1] == "" {
+		return 0, ErrCouldNotParseYear
+	}
+
+	year, err := strconv.Atoi(res[1])
+	if err != nil {
+		log.Fatalf("failed to parse year string %v to int: %v", res[1], err)
+		return 0, ErrCouldNotParseYear
+	}
+
+	return year, nil
 }
 
 func init() {
-	albumYearRegex = regexp.MustCompile("^.+[-_ ]([12]\\d{3})$")
+	albumYearRegex = regexp.MustCompile(`^.+[-_ ]([12]\d{3})$`)
 }

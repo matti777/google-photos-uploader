@@ -17,8 +17,8 @@ import (
 
 // Application configuration file structure
 type AppConfiguration struct {
-	ClientID     string              `json:"-"`
-	ClientSecret string              `json:"-"`
+	ClientID     string              `json:"clientId"`
+	ClientSecret string              `json:"clientSecret"`
 	AuthToken    *oauth2.Token       `json:"authToken"`
 	UserInfo     photosutil.UserInfo `json:"userInfo"`
 }
@@ -48,12 +48,17 @@ func ReadAppConfig() *AppConfiguration {
 	var cfg AppConfiguration
 
 	appCfgFilePath := MustGetAppConfigPath()
-	log.Debugf("Got app config file path: %v", appCfgFilePath)
+	log.Debugf("Reading application configuration file %v", appCfgFilePath)
 
 	file, err := os.Open(appCfgFilePath)
 	if err != nil {
-		log.Debugf("Failed to open app cfg file; perhaps it doesnt "+
-			"exist? error: %v", err)
+		if err == os.ErrNotExist {
+			// This is OK, it wont exist on first run
+			log.Debugf("Application configuration file not found.")
+			return &cfg
+		}
+
+		log.Errorf("Failed to open app cfg file: %v", err)
 		return &cfg
 	}
 
@@ -69,7 +74,7 @@ func ReadAppConfig() *AppConfiguration {
 // Write the app configuration file. Panics on failure.
 func MustWriteAppConfig(c *AppConfiguration) {
 	appCfgFilePath := MustGetAppConfigPath()
-	log.Debugf("Using app config file path: %v", appCfgFilePath)
+	log.Debugf("Writing application configuration file %v", appCfgFilePath)
 
 	file, err := os.Create(appCfgFilePath)
 	if err != nil {

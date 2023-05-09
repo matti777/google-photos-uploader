@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -142,20 +141,21 @@ func simulateUploadPhoto(path string, size int64,
 // bar for the upload.
 // Returns image upload token or error.
 func upload(progress *uiprogress.Progress, dir string, file os.FileInfo,
-	padLength, parsedAlbumYear int) (string, error) {
+	padLength, albumYear int) (string, error) {
 
 	paddedName := strutil.PadRight(file.Name(), padLength, ' ')
 
 	filePath := filepath.Join(dir, file.Name())
 	fileSize := file.Size()
 
+	// Write creation date to EXIF data so Google Photos album will get a proper year
 	if !settings.DryRun {
-		// Write creation date to EXIF data so Google Photos album will get a proper year
 		tempFile, err := ioutil.TempFile("", "*.jpeg")
 		if err != nil {
 			log.Fatalf("failed to create temp file: %v", err)
 		}
-		fileDate := getDateForFile(parsedAlbumYear, file)
+		fileDate := getDateForFile(albumYear, file)
+		log.Debugf("Writing file date %v to image", fileDate)
 		fileSize, err = exif.WriteImageDate(filePath, fileDate, tempFile.Name())
 		if err != nil {
 			log.Fatalf("failed to write EXIF info: %v", err)
@@ -163,8 +163,7 @@ func upload(progress *uiprogress.Progress, dir string, file os.FileInfo,
 		filePath = tempFile.Name()
 	}
 
-	bar := progress.AddBar(int(fileSize)).PrependElapsed().
-		AppendCompleted()
+	bar := progress.AddBar(int(fileSize)).PrependElapsed().AppendCompleted()
 	bar.PrependFunc(func(b *uiprogress.Bar) string {
 		return paddedName
 	})
@@ -186,8 +185,9 @@ func upload(progress *uiprogress.Progress, dir string, file os.FileInfo,
 func getDateForFile(albumYear int, file fs.FileInfo) time.Time {
 	fileDate := file.ModTime()
 
-	// If the file date's year matches the parsed album year, use the file date
-	if albumYear == fileDate.Year() {
+	// If the file date's year matches the parsed album year
+	// (or album year has not been parsed successfully) use the file date
+	if albumYear <= 0 || albumYear == fileDate.Year() {
 		return fileDate
 	}
 
@@ -197,21 +197,8 @@ func getDateForFile(albumYear int, file fs.FileInfo) time.Time {
 
 // uploadAll uploads all photos in a given directory. It returns the
 // list of upload tokens for the uploaded photos.
-func uploadAll(dir, dirName string, files []os.FileInfo) []string {
+func uploadAll(absoluteDirPath string, albumYear int, files []os.FileInfo) []string {
 	uploadTokens := make([]string, 0, len(files))
-
-	parsedAlbumYear := 0
-	if !settings.NoParseYear {
-		yearStr := util.ParseAlbumYear(dirName)
-		if yearStr != "" {
-			y, err := strconv.Atoi(yearStr)
-			if err != nil {
-				log.Fatalf("failed to parse year string %v to int", yearStr)
-			}
-
-			parsedAlbumYear = y
-		}
-	}
 
 	// Calculate the common padding length from the longest filename
 	padLength := util.FindLongestName(files)
@@ -229,7 +216,7 @@ func uploadAll(dir, dirName string, files []os.FileInfo) []string {
 		file := f
 
 		q.Add(func() {
-			uploadToken, err := upload(progress, dir, file, padLength, parsedAlbumYear)
+			uploadToken, err := upload(progress, absoluteDirPath, file, padLength, albumYear)
 			if err != nil {
 				log.Fatalf("File upload failed: %v", err)
 			}
@@ -252,52 +239,32 @@ func uploadAll(dir, dirName string, files []os.FileInfo) []string {
 	return uploadTokens
 }
 
-// Processes all the entries in a single directory. Aborts as soon as
-// an upload fails.
-func mustProcessPhotosDirectory(dir string) {
-	// Check that the diretory exists
-	if exists, _ := directoryExists(dir); !exists {
-		log.Fatalf("directory '%v' does not exist!", dir)
-	}
+func uploadDirectoryFiles(absoluteDirPath string, files []fs.FileInfo,
+	albumName string, albumYear int) {
 
-	dirName := filepath.Base(dir)
-	albumName := formAlbumName(dirName, settings.Capitalize, settings.NameSubstitutionTokens)
-
-	log.Debugf("Processing directory %v with name %v, album name: %v..",
-		dir, dirName, albumName)
-
-	// First check that there isn't already and album with such name
-	album := settings.FindAlbum(albumName)
-	if album != nil {
-		fmt.Printf("Album '%v' already exists\n", albumName)
+	if len(files) == 0 {
+		log.Debugf("No files to uplkoad.")
 		return
 	}
 
-	// Find all the files & subdirectories
-	files, dirs := mustScanDirectory(dir)
+	// Ask the user whether to continue uploading to this album
+	util.MustConfirm("About to upload directory %v (%v photos) as album '%v'",
+		absoluteDirPath, len(files), albumName)
 
-	uploadTokens := make([]string, 0)
-
-	if len(files) > 0 {
-		// Ask the user whether to continue uploading to this album
-		util.MustConfirm("About to upload directory '%v' (%v photos) as album '%v'",
-			dirName, len(files), albumName)
-
-		// Upload all the files in this directory
-		uploadTokens = uploadAll(dir, dirName, files)
-	}
+	// Upload all the files in this directory
+	uploadTokens := uploadAll(absoluteDirPath, albumYear, files)
 
 	// If there is something to add, add the photos to albums
 	if len(uploadTokens) > 0 {
-		// Get / create album by albumName
-		album, err := createAlbum(albumName)
-		if err != nil {
-			log.Fatalf("failed to create album: %v", err)
-		}
-
 		log.Debugf("Adding %v photos to album %+v", len(uploadTokens), albumName)
 
 		if !settings.DryRun {
+			// Create album by albumName
+			album, err := createAlbum(albumName)
+			if err != nil {
+				log.Fatalf("failed to create album: %v", err)
+			}
+
 			// We must split the tokens into groups of max MaxAddPhotosPerCall items
 			chunks := util.Chunked(uploadTokens, photos.MaxAddPhotosPerCall)
 			for _, c := range chunks {
@@ -308,29 +275,86 @@ func mustProcessPhotosDirectory(dir string) {
 			}
 		}
 	}
+}
+
+func mustProcessPhotoAlbumSubDirectory(absoluteDirPath, albumName string, albumYear int) {
+	// Find all the files & subdirectories
+	files, dirs := mustScanDirectory(absoluteDirPath)
+
+	uploadDirectoryFiles(absoluteDirPath, files, albumName, albumYear)
 
 	if settings.Recurse {
 		for _, d := range dirs {
-			subDir := filepath.Join(dir, d.Name())
-			mustProcessPhotosDirectory(subDir)
+			absoluteSubDirPath := filepath.Join(absoluteDirPath, d.Name())
+			mustProcessPhotoAlbumSubDirectory(absoluteSubDirPath, albumName, albumYear)
 		}
 	}
 
-	log.Debugf("Photos directory '%v' processed.", dirName)
+	log.Debugf("Photo Album subdirectory %v processed.", absoluteDirPath)
+}
+
+// Processes a Photo Album directory. Handles all the files in the directory and
+// optionally all the subdirectories as well. Aborts as soon as an upload fails.
+func mustProcessPhotoAlbumDirectory(absoluteDirPath string) {
+	// Check that the diretory exists
+	if exists, _ := directoryExists(absoluteDirPath); !exists {
+		log.Fatalf("directory '%v' does not exist!", absoluteDirPath)
+	}
+
+	dirName := filepath.Base(absoluteDirPath)
+	albumName := formAlbumName(dirName, settings.Capitalize, settings.NameSubstitutionTokens)
+
+	log.Debugf("Processing directory %v with name %v, album name: %v..",
+		absoluteDirPath, dirName, albumName)
+
+	// Attempt to parse the album year from the directory name
+	albumYear := 0
+	var err error
+
+	if !settings.NoParseYear {
+		albumYear, err = util.ParseAlbumYear(dirName)
+		if err != nil {
+			fmt.Printf("failed to parse album year from directory name '%v' -- "+
+				"skipping this directory. You can disable album year parsing by suplyinhg "+
+				"command line parameter --no-parse-year.", dirName)
+			return
+		}
+	}
+
+	// First check that there isn't already and album with such name
+	album := settings.FindAlbum(albumName)
+	if album != nil {
+		fmt.Printf("Album '%v' already exists\n", albumName)
+		return
+	}
+
+	// Find all the files & subdirectories
+	files, dirs := mustScanDirectory(absoluteDirPath)
+
+	uploadDirectoryFiles(absoluteDirPath, files, albumName, albumYear)
+
+	if settings.Recurse {
+		for _, d := range dirs {
+			absoluteSubDirPath := filepath.Join(absoluteDirPath, d.Name())
+			mustProcessPhotoAlbumSubDirectory(absoluteSubDirPath, albumName, albumYear)
+		}
+	}
+
+	log.Debugf("Photo Album directory %v processed.", absoluteDirPath)
 }
 
 // Scans the "base" directory (one containing all the subdirectories of photos to
 // be uploaded as albums)
-func ProcessBaseDir(dir string) {
+func ProcessBaseDir(absoluteDirPath string) {
 	// Check that the diretory exists
-	if exists, _ := directoryExists(dir); !exists {
-		log.Fatalf("Directory '%v' does not exist!", dir)
+	if exists, _ := directoryExists(absoluteDirPath); !exists {
+		log.Fatalf("Directory '%v' does not exist!", absoluteDirPath)
 	}
 
-	_, subdirs := mustScanDirectory(dir)
+	_, subdirs := mustScanDirectory(absoluteDirPath)
 
 	for _, d := range subdirs {
-		subDir := filepath.Join(dir, d.Name())
-		mustProcessPhotosDirectory(subDir)
+		subDir := filepath.Join(absoluteDirPath, d.Name())
+		mustProcessPhotoAlbumDirectory(subDir)
 	}
 }
