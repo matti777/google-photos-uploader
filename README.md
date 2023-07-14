@@ -7,7 +7,7 @@ A command line utility for uploading a local directory structure of (JPEG) image
 Using the Google Photos API requires the use of the Google OAuth2 authorization flow. Unfortunately
 this means you have to set up a GCP project for this purpose.
 
-See the instructions here: [https://developers.google.com/photos/library/guides/authorization](https://developers.google.com/photos/library/guides/authorization).
+See the instructions here: [https://developers.google.com/photos/library/guides/get-started](https://developers.google.com/photos/library/guides/get-started).
 
 Make a note of the Client ID / Client Secret values from the GCP console.
 

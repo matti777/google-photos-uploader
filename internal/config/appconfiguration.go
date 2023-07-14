@@ -3,7 +3,9 @@ package config
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -52,8 +54,7 @@ func ReadAppConfig() *AppConfiguration {
 
 	file, err := os.Open(appCfgFilePath)
 	if err != nil {
-		// TODO check for "no such file or directory" error as well
-		if err == os.ErrNotExist {
+		if errors.Is(err, fs.ErrNotExist) {
 			// This is OK, it wont exist on first run
 			log.Debugf("Application configuration file not found.")
 			return &cfg
@@ -100,8 +101,8 @@ func MustReadAppCredentials() (string, string) {
 
 	fmt.Printf("\nYou must enter the application credentials.\n\n"+
 		"Enter the ClientID and Client Secret for the app. To "+
-		"get these, go to https://console.developers.google.com/ and "+
-		"create a new project, navigate to Credentials and select "+
+		"get these, go to https://console.developers.google.com/ "+
+		"for your GCP project, navigate to Credentials and select "+
 		"Create credentials > OAuth client ID.\n\n"+
 		"The credentials will be stored in the app configuration file %v.\n\n",
 		appCfgFilePath)
