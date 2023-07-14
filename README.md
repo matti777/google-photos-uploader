@@ -1,33 +1,29 @@
 # Google Photos CLI Uploader
 
-A command line utility for uploading a local directory structure of (JPEG) images into Google Photos as new Albums. Each directory is uploaded into an Album whose name is derived from the name of the directory.
+A command line utility for uploading a local directory structure of (JPEG) images into Google Photos as new Albums. The contents of each subdirectory (and, optionally, the contents of its children recursively) are uploaded as an Album whose name is derived from the name of the directory.
 
 ## Prerequisites
 
-You must have `protoc` and `protoc-gen-go` installed, eg.:
+Using the Google Photos API requires the use of the Google OAuth2 authorization flow. Unfortunately
+this means you have to set up a GCP project for this purpose.
 
-```sh
-brew install protobuf
-brew install protoc-gen-go
-```
+See the instructions here: [https://developers.google.com/photos/library/guides/authorization](https://developers.google.com/photos/library/guides/authorization).
+
+Make a note of the Client ID / Client Secret values from the GCP console.
 
 ## Building the application
 
-To build the proto files, run:
+To build the binary with debug logs, run:
 
 ```sh
-make protoc
+make uploader-debug
 ```
 
-To build the binary, run:
+To build the binary without debug logs, run:
 
 ```sh
-make compile
+make uploader
 ```
-
-## Omitting Debug logging
-
-To build a binary without debug logs, specify `-tags nodebug` at the `go build` command you are running to build the binary.
 
 ## Development Guidelines
 

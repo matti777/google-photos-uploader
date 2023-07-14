@@ -9,8 +9,11 @@ all: compile test
 exiftest:
 	go build -o $(EXIFTEST_BINARY) $(EXIFTEST_SRC)
 
-uploader:
+uploader-debug:
 	go build -o $(MAIN_BINARY) $(MAIN_SRC)
+
+uploader:
+	go build -tags nodebug -o $(MAIN_BINARY) $(MAIN_SRC)
 
 compile: exiftest uploader
 
