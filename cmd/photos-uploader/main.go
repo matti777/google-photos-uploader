@@ -57,6 +57,23 @@ func defaultAction(c *cli.Context) error {
 
 	readFlags(c)
 
+	baseDir := c.Args().Get(0)
+	if baseDir == "" {
+		log.Debugf("No base dir defined, using the CWD..")
+		dir, err := os.Getwd()
+		if err != nil {
+			log.Fatalf("Failed to get CWD: %v", err)
+		}
+		baseDir = dir
+	}
+
+	// Resolve the base dir
+	baseDir, err := filepath.Abs(baseDir)
+	if err != nil {
+		log.Fatalf("Failed to get absolute path for '%v': %v", err)
+	}
+	log.Debugf("Finding photo album directories under base directory %v", baseDir)
+
 	authorize := util.GlobalBoolT(c, "authorize")
 
 	appConfig = config.ReadAppConfig()
@@ -103,23 +120,6 @@ func defaultAction(c *cli.Context) error {
 			return nil
 		}
 	}
-
-	baseDir := c.Args().Get(0)
-	if baseDir == "" {
-		log.Debugf("No base dir defined, using the CWD..")
-		dir, err := os.Getwd()
-		if err != nil {
-			log.Fatalf("Failed to get CWD: %v", err)
-		}
-		baseDir = dir
-	}
-
-	// Resolve the base dir
-	baseDir, err := filepath.Abs(baseDir)
-	if err != nil {
-		log.Fatalf("Failed to get absolute path for '%v': %v", err)
-	}
-	log.Debugf("Finding photo album directories under base directory %v", baseDir)
 
 	photosClient := photos.MustCreateClient(appConfig.ClientID, appConfig.ClientSecret,
 		appConfig.AuthToken)

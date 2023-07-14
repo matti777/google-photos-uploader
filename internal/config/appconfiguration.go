@@ -52,6 +52,7 @@ func ReadAppConfig() *AppConfiguration {
 
 	file, err := os.Open(appCfgFilePath)
 	if err != nil {
+		// TODO check for "no such file or directory" error as well
 		if err == os.ErrNotExist {
 			// This is OK, it wont exist on first run
 			log.Debugf("Application configuration file not found.")
