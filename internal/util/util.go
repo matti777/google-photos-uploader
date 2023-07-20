@@ -13,8 +13,6 @@ import (
 
 	"github.com/matti777/google-photos-uploader/internal/config"
 	"github.com/matti777/google-photos-uploader/internal/logging"
-
-	"github.com/urfave/cli"
 )
 
 var (
@@ -52,16 +50,6 @@ func FindLongestName(infos []os.FileInfo) int {
 	}
 
 	return longest
-}
-
-// GlobalBoolT checks for the presence of a BoolT
-// flag and returns false if it is not specified.
-func GlobalBoolT(c *cli.Context, name string) bool {
-	if !c.IsSet(name) {
-		return false
-	}
-
-	return c.GlobalBoolT(name)
 }
 
 // Replaces substrings in the string with other strings, using strings.Replacer.

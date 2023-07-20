@@ -12,9 +12,8 @@ import (
 	photos "github.com/matti777/google-photos-uploader/internal/googlephotos"
 	photosutil "github.com/matti777/google-photos-uploader/internal/googlephotos/util"
 	"github.com/matti777/google-photos-uploader/internal/logging"
-	"github.com/matti777/google-photos-uploader/internal/util"
 
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -26,12 +25,12 @@ var (
 )
 
 func readFlags(c *cli.Context) {
-	settings.Recurse = util.GlobalBoolT(c, "recursive")
+	settings.Recurse = c.Bool("recursive")
 	log.Debugf("Recurse into subdirectories: %v", settings.Recurse)
 
-	settings.SkipConfirmation = util.GlobalBoolT(c, "yes")
+	settings.SkipConfirmation = c.Bool("yes")
 
-	settings.DryRun = util.GlobalBoolT(c, "dry-run")
+	settings.DryRun = c.Bool("dry-run")
 	if settings.DryRun {
 		log.Debugf("--dry-run enabled, not changes will be made")
 	}
@@ -42,10 +41,10 @@ func readFlags(c *cli.Context) {
 			settings.NameSubstitutionTokens)
 	}
 
-	settings.NoParseYear = util.GlobalBoolT(c, "no-parse-year")
+	settings.NoParseYear = c.Bool("no-parse-year")
 	log.Debugf("Skipping parsing folder year?: %v", settings.NoParseYear)
 
-	settings.Capitalize = util.GlobalBoolT(c, "capitalize")
+	settings.Capitalize = c.Bool("capitalize")
 	log.Debugf("Capitalizing folder name words: %v", settings.Capitalize)
 
 	settings.MaxConcurrency = c.Int("concurrency")
@@ -59,12 +58,8 @@ func defaultAction(c *cli.Context) error {
 
 	baseDir := c.Args().Get(0)
 	if baseDir == "" {
-		log.Debugf("No base dir defined, using the CWD..")
-		dir, err := os.Getwd()
-		if err != nil {
-			log.Fatalf("Failed to get CWD: %v", err)
-		}
-		baseDir = dir
+		cli.ShowAppHelp(c)
+		return nil
 	}
 
 	// Resolve the base dir
@@ -74,7 +69,7 @@ func defaultAction(c *cli.Context) error {
 	}
 	log.Debugf("Finding photo album directories under base directory %v", baseDir)
 
-	authorize := util.GlobalBoolT(c, "authorize")
+	authorize := c.Bool("authorize")
 
 	appConfig = config.ReadAppConfig()
 
@@ -158,11 +153,12 @@ func main() {
 		"photos to Google Photos from a local disk directory. "+
 		"For help, run '%v help'", appname)
 	app.Copyright = "(c) 2018-2023 Matti Dahlbom"
-	app.Version = "0.0.2-alpha"
+	app.Version = "1.0.0"
 	app.Action = defaultAction
 	app.Flags = []cli.Flag{
-		cli.BoolTFlag{
-			Name: "authorize",
+		&cli.BoolFlag{
+			Name:  "authorize",
+			Value: true,
 			Usage: "Trigger Google authorization flow. " +
 				"You only have to run this one time; " +
 				"after you have authenticated, the authentication token " +
@@ -170,28 +166,26 @@ func main() {
 				"account, simply define this flag again. Specifying this flag also " +
 				"causes the client ID / secret to be reset and they can be re-entered.",
 		},
-		cli.BoolTFlag{
-			Name:  "flush-journal, f",
-			Usage: "Skip reading journal files for files already uploaded; re-upload everything",
-		},
-		cli.BoolTFlag{
+		&cli.BoolFlag{
 			Name:  "recursive, r",
 			Usage: "Process subdirectories of the photo directories recursively",
 		},
-		cli.BoolTFlag{
+		&cli.BoolFlag{
 			Name:  "yes, y",
+			Value: true,
 			Usage: "Answer Yes to all confirmations",
 		},
-		cli.BoolTFlag{
+		&cli.BoolFlag{
 			Name:  "dry-run, n",
+			Value: true,
 			Usage: "Specify to just scan, not actually upload anything",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  "concurrency, c",
 			Usage: "Maximum number of simultaneous uploads",
 			Value: 1,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: "folder-name-substitutions, s",
 			Usage: "Directory name -> Photos Folder substition " +
 				"tokens, default is no substitution. " +
@@ -200,16 +194,18 @@ func main() {
 				"all underscores with spaces and add spaces around " +
 				"all dashes, specify -s \"_, ,-, - \"",
 		},
-		cli.BoolTFlag{
-			Name: "no-parse-year",
+		&cli.BoolFlag{
+			Name:  "no-parse-year",
+			Value: true,
 			Usage: "Do not attempt to parse the year from the directory " +
 				"name; by default, an attempt is made to extract Photos Folder " +
 				"creation date using regex '.*[\\- _][0-9]{4}'. Eg. " +
 				"'Pictures_from_Thailand-2009' would generate folder creation " +
 				"year 2009.",
 		},
-		cli.BoolTFlag{
-			Name: "capitalize, a",
+		&cli.BoolFlag{
+			Name:  "capitalize, a",
+			Value: true,
 			Usage: "When forming the Photos Folder names, capitalize the " +
 				"first letter of each word, ie 'trip to tonga, 2018' " +
 				"would become 'Trip To Tonga, 2018'. Combine with " +
