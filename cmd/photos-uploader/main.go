@@ -13,12 +13,12 @@ import (
 	photosutil "github.com/matti777/google-photos-uploader/internal/googlephotos/util"
 	"github.com/matti777/google-photos-uploader/internal/logging"
 
-	gologging "github.com/op/go-logging"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )
 
 var (
-	log      *gologging.Logger
+	log      *logrus.Logger
 	settings = config.MustGetSettings()
 
 	// Application configuration
@@ -125,14 +125,12 @@ func mustInitGooglePhotos() {
 }
 
 func defaultAction(c *cli.Context) error {
-	logLevel := gologging.CRITICAL
+	logLevel := logrus.ErrorLevel
 	if c.IsSet("verbose") {
-		logLevel = gologging.DEBUG
+		logLevel = logrus.DebugLevel
 	}
-	logging.InitLogging(logLevel)
 	log = logging.MustGetLogger()
-
-	log.Debugf("Running Default action..")
+	log.SetLevel(logLevel)
 
 	readFlags(c)
 
@@ -145,7 +143,7 @@ func defaultAction(c *cli.Context) error {
 	// Resolve the base dir
 	baseDir, err := filepath.Abs(baseDir)
 	if err != nil {
-		log.Fatalf("Failed to get absolute path for '%v': %v", err)
+		log.Fatalf("Failed to get absolute path for '%v': %v", baseDir, err)
 	}
 	log.Debugf("Base directory is: %v", baseDir)
 
