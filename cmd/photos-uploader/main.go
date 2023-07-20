@@ -13,11 +13,12 @@ import (
 	photosutil "github.com/matti777/google-photos-uploader/internal/googlephotos/util"
 	"github.com/matti777/google-photos-uploader/internal/logging"
 
+	gologging "github.com/op/go-logging"
 	"github.com/urfave/cli/v2"
 )
 
 var (
-	log      = logging.MustGetLogger()
+	log      *gologging.Logger
 	settings = config.MustGetSettings()
 
 	// Application configuration
@@ -25,12 +26,12 @@ var (
 )
 
 func readFlags(c *cli.Context) {
-	settings.Recurse = c.Bool("recursive")
+	settings.Recurse = c.IsSet("recursive")
 	log.Debugf("Recurse into subdirectories: %v", settings.Recurse)
 
-	settings.SkipConfirmation = c.Bool("yes")
+	settings.SkipConfirmation = c.IsSet("yes")
 
-	settings.DryRun = c.Bool("dry-run")
+	settings.DryRun = c.IsSet("dry-run")
 	if settings.DryRun {
 		log.Debugf("--dry-run enabled, not changes will be made")
 	}
@@ -41,7 +42,7 @@ func readFlags(c *cli.Context) {
 			settings.NameSubstitutionTokens)
 	}
 
-	settings.NoParseYear = c.Bool("no-parse-year")
+	settings.NoParseYear = c.IsSet("no-parse-year")
 	log.Debugf("Skipping parsing folder year?: %v", settings.NoParseYear)
 
 	settings.Capitalize = c.Bool("capitalize")
@@ -51,27 +52,10 @@ func readFlags(c *cli.Context) {
 	log.Debugf("maxConcurrency = %v", settings.MaxConcurrency)
 }
 
-func defaultAction(c *cli.Context) error {
-	log.Debugf("Running Default action..")
-
-	readFlags(c)
-
-	baseDir := c.Args().Get(0)
-	if baseDir == "" {
-		cli.ShowAppHelp(c)
-		return nil
-	}
-
-	// Resolve the base dir
-	baseDir, err := filepath.Abs(baseDir)
-	if err != nil {
-		log.Fatalf("Failed to get absolute path for '%v': %v", err)
-	}
-	log.Debugf("Finding photo album directories under base directory %v", baseDir)
-
-	authorize := c.Bool("authorize")
-
+func handleAuthorize(c *cli.Context) error {
 	appConfig = config.ReadAppConfig()
+
+	authorize := c.IsSet("authorize")
 
 	if authorize {
 		appConfig.ClientID = ""
@@ -112,15 +96,23 @@ func defaultAction(c *cli.Context) error {
 		res, _ := reader.ReadString('\n')
 		if strings.ToLower(strings.Trim(res, " \n\t\r")) != "y" {
 			fmt.Print("Re-run with --authorize to re-authorize as a different user.")
-			return nil
+			return cli.Exit("User aborted.", 0)
 		}
+	}
+
+	return nil
+}
+
+func mustInitGooglePhotos() {
+	if appConfig.ClientID == "" || appConfig.ClientSecret == "" || appConfig.AuthToken == nil {
+		log.Fatalf("appConfig missing credentials to create Photos client")
 	}
 
 	photosClient := photos.MustCreateClient(appConfig.ClientID, appConfig.ClientSecret,
 		appConfig.AuthToken)
 
-	// Retrieve the list of albums
-	fmt.Printf("Fetching the list of Photos albums..\n")
+	// Retrieve the list of albums and store into settings
+	fmt.Printf("Fetching the list of existing Google Photos albums..\n")
 	if l, err := photosClient.ListAlbums(); err != nil {
 		log.Fatalf("Failed to list Google Photos albums: %v", err)
 	} else {
@@ -130,8 +122,40 @@ func defaultAction(c *cli.Context) error {
 	for _, a := range settings.Albums {
 		log.Debugf("Found existing Photos Album: '%v'", a.Title)
 	}
+}
 
-	fmt.Printf("Will look for images with file extensions: %v\n", settings.ImageExtensions)
+func defaultAction(c *cli.Context) error {
+	logLevel := gologging.CRITICAL
+	if c.IsSet("verbose") {
+		logLevel = gologging.DEBUG
+	}
+	logging.InitLogging(logLevel)
+	log = logging.MustGetLogger()
+
+	log.Debugf("Running Default action..")
+
+	readFlags(c)
+
+	baseDir := c.Args().Get(0)
+	if baseDir == "" {
+		cli.ShowAppHelp(c)
+		return cli.Exit("Must define a base directory!", -1)
+	}
+
+	// Resolve the base dir
+	baseDir, err := filepath.Abs(baseDir)
+	if err != nil {
+		log.Fatalf("Failed to get absolute path for '%v': %v", err)
+	}
+	log.Debugf("Base directory is: %v", baseDir)
+
+	if !settings.DryRun {
+		if err := handleAuthorize(c); err != nil {
+			return nil
+		}
+
+		mustInitGooglePhotos()
+	}
 
 	files.ProcessBaseDir(baseDir)
 
@@ -140,7 +164,6 @@ func defaultAction(c *cli.Context) error {
 
 func main() {
 	appname := os.Args[0]
-	log.Debugf("main(): running binary %v..", appname)
 
 	// Setup CLI app framework
 	app := cli.NewApp()
@@ -150,15 +173,19 @@ func main() {
 	app.Usage = "A command line Google Photos upload utility"
 	app.UsageText = fmt.Sprintf("%v [options] directory", appname)
 	app.Description = fmt.Sprintf("Command-line utility for uploading "+
-		"photos to Google Photos from a local disk directory. "+
+		"photos to Google Photos from a local disk directory.\n\n"+
+		"You must supply a directory as argument; the contents of the subdirectories of that"+
+		"directory will be uploaded as albums to Google Photos.\n\n"+
+		"Currently only JPEG images are supported.\n\n"+
 		"For help, run '%v help'", appname)
 	app.Copyright = "(c) 2018-2023 Matti Dahlbom"
 	app.Version = "1.0.0"
 	app.Action = defaultAction
 	app.Flags = []cli.Flag{
 		&cli.BoolFlag{
-			Name:  "authorize",
-			Value: true,
+			Name:    "authorize",
+			Aliases: []string{"a"},
+			Value:   false,
 			Usage: "Trigger Google authorization flow. " +
 				"You only have to run this one time; " +
 				"after you have authenticated, the authentication token " +
@@ -167,26 +194,32 @@ func main() {
 				"causes the client ID / secret to be reset and they can be re-entered.",
 		},
 		&cli.BoolFlag{
-			Name:  "recursive, r",
-			Usage: "Process subdirectories of the photo directories recursively",
+			Name:    "recursive",
+			Aliases: []string{"r"},
+			Value:   false,
+			Usage:   "Process subdirectories of the photo directories recursively",
 		},
 		&cli.BoolFlag{
-			Name:  "yes, y",
-			Value: true,
-			Usage: "Answer Yes to all confirmations",
+			Name:    "yes",
+			Aliases: []string{"y"},
+			Value:   false,
+			Usage:   "Answer Yes to all confirmations",
 		},
 		&cli.BoolFlag{
-			Name:  "dry-run, n",
-			Value: true,
-			Usage: "Specify to just scan, not actually upload anything",
+			Name:    "dry-run",
+			Aliases: []string{"n"},
+			Value:   false,
+			Usage:   "Specify to just scan, not actually upload anything",
 		},
 		&cli.IntFlag{
-			Name:  "concurrency, c",
-			Usage: "Maximum number of simultaneous uploads",
-			Value: 1,
+			Name:    "concurrency",
+			Aliases: []string{"c"},
+			Usage:   "Maximum number of simultaneous uploads",
+			Value:   1,
 		},
 		&cli.StringFlag{
-			Name: "folder-name-substitutions, s",
+			Name:    "folder-name-substitutions",
+			Aliases: []string{"s"},
 			Usage: "Directory name -> Photos Folder substition " +
 				"tokens, default is no substitution. " +
 				"The format is CSV like so: old1,new1,old2,new2 where token " +
@@ -196,7 +229,7 @@ func main() {
 		},
 		&cli.BoolFlag{
 			Name:  "no-parse-year",
-			Value: true,
+			Value: false,
 			Usage: "Do not attempt to parse the year from the directory " +
 				"name; by default, an attempt is made to extract Photos Folder " +
 				"creation date using regex '.*[\\- _][0-9]{4}'. Eg. " +
@@ -204,12 +237,18 @@ func main() {
 				"year 2009.",
 		},
 		&cli.BoolFlag{
-			Name:  "capitalize, a",
+			Name:  "capitalize",
 			Value: true,
 			Usage: "When forming the Photos Folder names, capitalize the " +
 				"first letter of each word, ie 'trip to tonga, 2018' " +
 				"would become 'Trip To Tonga, 2018'. Combine with " +
 				"folder-name-substitutions to clean up the directory names",
+		},
+		&cli.BoolFlag{
+			Name:    "verbose",
+			Aliases: []string{"vv"},
+			Value:   false,
+			Usage:   "Specify to enable debug logging",
 		},
 	}
 

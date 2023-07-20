@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"io/ioutil"
+	"mime"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,7 +60,6 @@ func mustScanDirectory(dir string) ([]os.FileInfo, []os.FileInfo) {
 	files := []os.FileInfo{}
 
 	for _, info := range infos {
-
 		if info.IsDir() {
 			dirs = append(dirs, info)
 		} else {
@@ -102,12 +102,11 @@ func createAlbum(name string) (*photos.Album, error) {
 }
 
 // Simulates the upload of a file.
-// Returns image upload token or error.
 func simulateUploadPhoto(path string, size int64,
 	callback func(int64)) (string, error) {
 
 	const steps = 10
-	const duration = 2.0
+	const duration = 1.0
 	const sleep = float32(time.Second) * (float32(duration) / steps)
 
 	remaining := size
@@ -195,8 +194,7 @@ func getDateForFile(albumYear int, file fs.FileInfo) time.Time {
 	return time.Date(albumYear, 1, 10, 10, 10, 10, 0, utcLocation)
 }
 
-// uploadAll uploads all photos in a given directory. It returns the
-// list of upload tokens for the uploaded photos.
+// Uploads the given files and returns the upload tokens for the uploaded photos.
 func uploadAll(absoluteDirPath string, albumYear int, files []os.FileInfo) []string {
 	uploadTokens := make([]string, 0, len(files))
 
@@ -239,32 +237,38 @@ func uploadAll(absoluteDirPath string, albumYear int, files []os.FileInfo) []str
 	return uploadTokens
 }
 
-func uploadDirectoryFiles(absoluteDirPath string, files []fs.FileInfo,
-	albumName string, albumYear int) {
+// Out of a list of files as input, filters out our non-supported files and
+// attempts to upload the valid ones. Successfully uploaded files are then added to the
+// specified album.
+func handleFileUpload(absoluteDirPath string, files []fs.FileInfo,
+	album *photos.Album, albumYear int) {
 
-	if len(files) == 0 {
-		log.Debugf("No files to uplkoad.")
+	// Filter out all non-supported files by extension
+	imageFiles := make([]fs.FileInfo, 0, len(files))
+	for _, f := range files {
+		if mime.TypeByExtension(filepath.Ext(f.Name())) != "image/jpeg" {
+			continue
+		}
+		imageFiles = append(imageFiles, f)
+	}
+
+	if len(imageFiles) == 0 {
+		log.Debugf("No image files to uplkoad.")
 		return
 	}
 
 	// Ask the user whether to continue uploading to this album
-	util.MustConfirm("About to upload directory %v (%v photos) as album '%v'",
-		absoluteDirPath, len(files), albumName)
+	util.MustConfirm("About to upload directory %v (%v image files) as album '%v'",
+		absoluteDirPath, len(imageFiles), album.Title)
 
 	// Upload all the files in this directory
-	uploadTokens := uploadAll(absoluteDirPath, albumYear, files)
+	uploadTokens := uploadAll(absoluteDirPath, albumYear, imageFiles)
 
 	// If there is something to add, add the photos to albums
 	if len(uploadTokens) > 0 {
-		log.Debugf("Adding %v photos to album %+v", len(uploadTokens), albumName)
+		log.Debugf("Adding %v photos to album %v", len(uploadTokens), album.Title)
 
 		if !settings.DryRun {
-			// Create album by albumName
-			album, err := createAlbum(albumName)
-			if err != nil {
-				log.Fatalf("failed to create album: %v", err)
-			}
-
 			// We must split the tokens into groups of max MaxAddPhotosPerCall items
 			chunks := util.Chunked(uploadTokens, photos.MaxAddPhotosPerCall)
 			for _, c := range chunks {
@@ -277,20 +281,20 @@ func uploadDirectoryFiles(absoluteDirPath string, files []fs.FileInfo,
 	}
 }
 
-func mustProcessPhotoAlbumSubDirectory(absoluteDirPath, albumName string, albumYear int) {
+func mustProcessPhotoAlbumSubDirectory(absoluteDirPath string, album *photos.Album, albumYear int) {
 	// Find all the files & subdirectories
 	files, dirs := mustScanDirectory(absoluteDirPath)
 
-	uploadDirectoryFiles(absoluteDirPath, files, albumName, albumYear)
+	handleFileUpload(absoluteDirPath, files, album, albumYear)
 
 	if settings.Recurse {
 		for _, d := range dirs {
 			absoluteSubDirPath := filepath.Join(absoluteDirPath, d.Name())
-			mustProcessPhotoAlbumSubDirectory(absoluteSubDirPath, albumName, albumYear)
+			mustProcessPhotoAlbumSubDirectory(absoluteSubDirPath, album, albumYear)
 		}
 	}
 
-	log.Debugf("Photo Album subdirectory %v processed.", absoluteDirPath)
+	log.Debugf("Photo Album '%v' subdirectory %v processed.", album.Title, absoluteDirPath)
 }
 
 // Processes a Photo Album directory. Handles all the files in the directory and
@@ -307,19 +311,21 @@ func mustProcessPhotoAlbumDirectory(absoluteDirPath string) {
 	log.Debugf("Processing directory %v with name %v, album name: %v..",
 		absoluteDirPath, dirName, albumName)
 
-	// Attempt to parse the album year from the directory name
-	albumYear := 0
+	albumYear := time.Now().Year()
 	var err error
 
 	if !settings.NoParseYear {
+		// Attempt to parse the album year from the directory name
 		albumYear, err = util.ParseAlbumYear(dirName)
 		if err != nil {
 			fmt.Printf("failed to parse album year from directory name '%v' -- "+
-				"skipping this directory. You can disable album year parsing by suplyinhg "+
+				"skipping this directory. You can disable album year parsing by supplying "+
 				"command line parameter --no-parse-year.", dirName)
 			return
 		}
 	}
+
+	log.Debugf("Using album year: %v", albumYear)
 
 	// First check that there isn't already and album with such name
 	album := settings.FindAlbum(albumName)
@@ -328,15 +334,26 @@ func mustProcessPhotoAlbumDirectory(absoluteDirPath string) {
 		return
 	}
 
+	// Create album by albumName
+	fmt.Printf("Creating new Google Photos album: %v\n", albumName)
+	if settings.DryRun {
+		album = &photos.Album{Title: albumName, ID: "123"}
+	} else {
+		album, err = createAlbum(albumName)
+		if err != nil {
+			log.Fatalf("failed to create album: %v", err)
+		}
+	}
+
 	// Find all the files & subdirectories
 	files, dirs := mustScanDirectory(absoluteDirPath)
 
-	uploadDirectoryFiles(absoluteDirPath, files, albumName, albumYear)
+	handleFileUpload(absoluteDirPath, files, album, albumYear)
 
 	if settings.Recurse {
 		for _, d := range dirs {
 			absoluteSubDirPath := filepath.Join(absoluteDirPath, d.Name())
-			mustProcessPhotoAlbumSubDirectory(absoluteSubDirPath, albumName, albumYear)
+			mustProcessPhotoAlbumSubDirectory(absoluteSubDirPath, album, albumYear)
 		}
 	}
 
@@ -357,4 +374,6 @@ func ProcessBaseDir(absoluteDirPath string) {
 		subDir := filepath.Join(absoluteDirPath, d.Name())
 		mustProcessPhotoAlbumDirectory(subDir)
 	}
+
+	fmt.Printf("%v album(s) created.\n", len(subdirs))
 }

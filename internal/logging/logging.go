@@ -12,23 +12,18 @@ var (
 	loggerOnce sync.Once
 )
 
-func setupLogging() {
+func InitLogging(level gologging.Level) {
 	var format = gologging.MustStringFormatter("%{color}%{time:15:04:05.000} " +
 		"%{shortfunc} ▶ %{level} " +
 		"%{color:reset} %{message}")
 	backend := gologging.NewLogBackend(os.Stderr, "", 0)
 	formatter := gologging.NewBackendFormatter(backend, format)
 	gologging.SetBackend(formatter)
-	if enableDebugLogging {
-		gologging.SetLevel(gologging.DEBUG, "uploader")
-	} else {
-		gologging.SetLevel(gologging.INFO, "uploader")
-	}
+	gologging.SetLevel(level, "uploader")
 }
 
 func MustGetLogger() *gologging.Logger {
 	loggerOnce.Do(func() {
-		setupLogging()
 		logger = gologging.MustGetLogger("uploader")
 	})
 

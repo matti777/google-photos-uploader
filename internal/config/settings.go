@@ -7,9 +7,6 @@ import (
 )
 
 type Settings struct {
-	// Filename extensions to consider as images
-	ImageExtensions []string
-
 	// Directory name -> photos folder substitution CSV string; should
 	// be formatted as old1,new1,old2,new2, ... where new1 replaces old1 etc
 	NameSubstitutionTokens string
@@ -47,7 +44,6 @@ var (
 func MustGetSettings() *Settings {
 	settingsOnce.Do(func() {
 		settings = &Settings{
-			ImageExtensions:        []string{"jpg", "jpeg"},
 			NameSubstitutionTokens: "",
 			Capitalize:             false,
 			NoParseYear:            false,
@@ -55,6 +51,7 @@ func MustGetSettings() *Settings {
 			DryRun:                 false,
 			Recurse:                false,
 			MaxConcurrency:         1,
+			Albums:                 []*photos.Album{},
 		}
 	})
 
