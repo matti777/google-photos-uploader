@@ -1,5 +1,4 @@
-// Implements an operation queue with configurable concurrency.
-package main
+package util
 
 import (
 	"errors"

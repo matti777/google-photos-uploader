@@ -4,105 +4,90 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"time"
 
-	exif "github.com/dsoprea/go-exif"
-	jpeg "github.com/dsoprea/go-jpeg-image-structure"
+	goexif "github.com/dsoprea/go-exif/v3"
+	jpeg "github.com/dsoprea/go-jpeg-image-structure/v2"
+	"github.com/pkg/errors"
 )
 
 const (
-	tagProcessingSoftware = "ProcessingSoftware"
-	tagDateTimeOriginal   = "DateTimeOriginal"
-	tagDateTime           = "DateTime"
+	// tagProcessingSoftware = "ProcessingSoftware"
+	tagDateTimeOriginal = "DateTimeOriginal"
+	tagDateTime         = "DateTime"
 )
 
-func setTag(rootIB *exif.IfdBuilder, ifdPath, tagName, tagValue string) error {
-	fmt.Printf("setTag(): ifdPath: %v, tagName: %v, tagValue: %v\n",
-		ifdPath, tagName, tagValue)
-
-	ifdIb, err := exif.GetOrCreateIbFromRootIb(rootIB, ifdPath)
+func tagHasValue(ifdIb *goexif.IfdBuilder, tagName string) bool {
+	tag, err := ifdIb.FindTagWithName(tagName)
 	if err != nil {
-		return fmt.Errorf("failed to get or create IB: %v", err)
+		return false
 	}
 
-	if err := ifdIb.SetStandardWithName(tagName, tagValue); err != nil {
-		return fmt.Errorf("failed to set DateTime tag: %v", err)
+	value := tag.Value()
+	if value == nil {
+		return false
 	}
 
-	return nil
+	return value.String() != ""
 }
 
-// SetDateIfNone sets the EXIF DateTime to the given Time unless it has
+// Sets the EXIF DateTime to the given Time unless it has
 // already been defined.
-func SetDateIfNone(filepath string, t time.Time) error {
+// Returns the number of bytes written to outputPath or error.
+func WriteImageDate(filepath string, t time.Time, outputPath string) (int64, error) {
 	parser := jpeg.NewJpegMediaParser()
-	sl, err := parser.ParseFile(filepath)
+	mediaCtx, err := parser.ParseFile(filepath)
 	if err != nil {
-		return fmt.Errorf("failed to parse JPEG file: %v", err)
+		return 0, errors.Errorf("failed to parse JPEG file: %v", err)
 	}
+
+	sl := mediaCtx.(*jpeg.SegmentList)
 
 	rootIb, err := sl.ConstructExifBuilder()
 	if err != nil {
-		log.Println("No EXIF; creating it from scratch")
-
-		//TODO what is wrong with this - no EXIF data end up in the JPEG
-		im := exif.NewIfdMappingWithStandard()
-		ti := exif.NewTagIndex()
-		if err := exif.LoadStandardTags(ti); err != nil {
-			return fmt.Errorf("failed to load standard tags: %v", err)
-		}
-
-		rootIb = exif.NewIfdBuilder(im, ti, exif.IfdPathStandard,
-			exif.EncodeDefaultByteOrder)
-		// if err := rootIb.AddStandardWithName(tagProcessingSoftware,
-		// 	"photos-uploader"); err != nil {
-		// 	return fmt.Errorf("failed to add ProcessingSoftware tag: %v", err)
-		// }
+		// log.Printf("No EXIF data, creating it from scratch: %v", err)
+		return 0, errors.Wrap(err, "Failed to construct EXIF builder")
 	}
 
-	// Form our timestamp string
-	ts := exif.ExifFullTimestampString(t)
-
-	// Set tags in IFD0
 	ifdPath := "IFD0"
-	if err := setTag(rootIb, ifdPath, tagDateTime, ts); err != nil {
-		return fmt.Errorf("failed to set tag %v: %v", tagDateTime, err)
-	}
-	if err := setTag(rootIb, ifdPath, tagProcessingSoftware,
-		"photos-uploader"); err != nil {
-		return fmt.Errorf("failed to set tag %v: %v", tagDateTime, err)
+
+	ifdIb, err := goexif.GetOrCreateIbFromRootIb(rootIb, ifdPath)
+	if err != nil {
+		return 0, errors.Wrap(err, "Failed to get or create ib")
 	}
 
-	// Set tags in IFD/Exif
-	ifdPath = "IFD/Exif"
-	if err := setTag(rootIb, ifdPath, tagDateTimeOriginal, ts); err != nil {
-		return fmt.Errorf("failed to set tag %v: %v", tagDateTime, err)
+	if !tagHasValue(ifdIb, tagDateTime) {
+		if err := ifdIb.SetStandardWithName(tagDateTime, t); err != nil {
+			return 0, errors.Wrap(err, "failed to set DateTime tag value")
+		}
+	}
+
+	if !tagHasValue(ifdIb, tagDateTimeOriginal) {
+		if err := ifdIb.SetStandardWithName(tagDateTimeOriginal, t); err != nil {
+			return 0, errors.Wrap(err, "failed to set DateTimeOriginal tag value")
+		}
 	}
 
 	// Update the exif segment.
 	if err := sl.SetExif(rootIb); err != nil {
-		return fmt.Errorf("failed to set EXIF to jpeg: %v", err)
+		return 0, errors.Wrap(err, "failed to set EXIF to jpeg")
 	}
 
 	// Write the modified file
 	b := new(bytes.Buffer)
 	if err := sl.Write(b); err != nil {
-		return fmt.Errorf("failed to create JPEG data: %v", err)
+		return 0, errors.Wrap(err, "failed to write JPEG data")
 	}
 
 	fmt.Printf("Number of image bytes: %v\n", len(b.Bytes()))
 
-	//TODO overwrite the original file; check that JpegMediaParser closes
-	// the file properly
-	filepath = "/tmp/test.jpg"
-
 	// Save the file
-	if err := ioutil.WriteFile(filepath, b.Bytes(), 0644); err != nil {
-		return fmt.Errorf("failed to write JPEG file: %v", err)
+	bytes := b.Bytes()
+	if err := ioutil.WriteFile(outputPath, bytes, 0644); err != nil {
+		return 0, errors.Wrap(err, "failed to write JPEG file")
 	}
 
-	fmt.Printf("Wrote %v\n", filepath)
+	fmt.Printf("Wrote %v\n", outputPath)
 
-	return nil
+	return int64(len(bytes)), nil
 }

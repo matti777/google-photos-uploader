@@ -1,14 +1,10 @@
-# Binaries for programs and plugins
 *.so
 *.dylib
 
 .DS_Store
-photos-uploader
-exiftest
 test_data
 .photos-uploader.journal
 secrets
-offline_doc
 
 *~
 \#*\#
@@ -19,4 +15,4 @@ auto-save-list
 tramp
 .\#*
 
-pkg/
+.vscode/
