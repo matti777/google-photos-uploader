@@ -11,6 +11,16 @@ See the instructions here: [https://developers.google.com/photos/library/guides/
 
 Make a note of the Client ID / Client Secret values from the GCP console.
 
+### Exiftool
+
+This project uses [https://exiftool.org/](Exiftool) to write EXIF data into the JPEG files.
+
+To install the tool:
+
+- MacOS: `brew install exiftool`
+- Debian: `sudo apt-get install exiftool`
+- Windows: See https://exiftool.org/install.html
+
 ## Building the application
 
 To build the binary (into bin/), run:
