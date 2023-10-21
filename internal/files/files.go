@@ -154,7 +154,8 @@ func upload(progress *uiprogress.Progress, dir string, file os.FileInfo,
 			log.Fatalf("failed to create temp file: %v", err)
 		}
 		fileDate := getDateForFile(albumYear, file)
-		log.Debugf("Writing file date %v to image", fileDate)
+		log.Debugf("Writing file date %v for image: %v/%v to tempFile: %v",
+			fileDate, dir, file.Name(), tempFile.Name())
 		fileSize, err = exif.WriteImageDate(filePath, fileDate, tempFile.Name())
 		if err != nil {
 			log.Fatalf("failed to write EXIF info: %v", err)
@@ -258,8 +259,8 @@ func handleFileUpload(absoluteDirPath string, files []fs.FileInfo,
 	}
 
 	// Ask the user whether to continue uploading to this album
-	util.MustConfirm("About to upload directory %v (%v image files) as album '%v'",
-		absoluteDirPath, len(imageFiles), album.Title)
+	util.MustConfirm(fmt.Sprintf("About to upload directory %v (%v image files) as album '%v'",
+		absoluteDirPath, len(imageFiles), album.Title), "")
 
 	// Upload all the files in this directory
 	uploadTokens := uploadAll(absoluteDirPath, albumYear, imageFiles)
@@ -299,7 +300,8 @@ func mustProcessPhotoAlbumSubDirectory(absoluteDirPath string, album *photos.Alb
 
 // Processes a Photo Album directory. Handles all the files in the directory and
 // optionally all the subdirectories as well. Aborts as soon as an upload fails.
-func mustProcessPhotoAlbumDirectory(absoluteDirPath string) {
+// Returns true if an album was created.
+func mustProcessPhotoAlbumDirectory(absoluteDirPath string) bool {
 	// Check that the diretory exists
 	if exists, _ := directoryExists(absoluteDirPath); !exists {
 		log.Fatalf("directory '%v' does not exist!", absoluteDirPath)
@@ -321,7 +323,7 @@ func mustProcessPhotoAlbumDirectory(absoluteDirPath string) {
 			fmt.Printf("failed to parse album year from directory name '%v' -- "+
 				"skipping this directory. You can disable album year parsing by supplying "+
 				"command line parameter --no-parse-year.", dirName)
-			return
+			return false
 		}
 	}
 
@@ -331,7 +333,7 @@ func mustProcessPhotoAlbumDirectory(absoluteDirPath string) {
 	album := settings.FindAlbum(albumName)
 	if album != nil {
 		fmt.Printf("Album '%v' already exists\n", albumName)
-		return
+		return false
 	}
 
 	// Create album by albumName
@@ -358,6 +360,8 @@ func mustProcessPhotoAlbumDirectory(absoluteDirPath string) {
 	}
 
 	log.Debugf("Photo Album directory %v processed.", absoluteDirPath)
+
+	return true
 }
 
 // Scans the "base" directory (one containing all the subdirectories of photos to
@@ -370,10 +374,14 @@ func ProcessBaseDir(absoluteDirPath string) {
 
 	_, subdirs := mustScanDirectory(absoluteDirPath)
 
+	albumCount := 0
+
 	for _, d := range subdirs {
 		subDir := filepath.Join(absoluteDirPath, d.Name())
-		mustProcessPhotoAlbumDirectory(subDir)
+		if mustProcessPhotoAlbumDirectory(subDir) {
+			albumCount += 1
+		}
 	}
 
-	fmt.Printf("%v album(s) created.\n", len(subdirs))
+	fmt.Printf("%v album(s) created.\n", albumCount)
 }

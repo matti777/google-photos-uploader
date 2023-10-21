@@ -27,14 +27,20 @@ var (
 )
 
 // Asks the user interactively a confirmation question; if the user declines
-// (answers anything but Y or defalut - empty string - stop execution.
-func MustConfirm(format string, args ...interface{}) {
-	text := fmt.Sprintf(format, args...)
-	fmt.Print(fmt.Sprintf("%v\nContinue? [Y/n] ", text))
+// (answers anything but Y or default - empty string - stop execution.
+func MustConfirm(prompt, declineText string) {
+	if settings.SkipConfirmation {
+		return
+	}
+
+	fmt.Printf("%v\nContinue? [Y/n] ", prompt)
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 
 	if input != "Y\n" && input != "\n" {
+		if declineText != "" {
+			fmt.Print(declineText)
+		}
 		os.Exit(1)
 	}
 }

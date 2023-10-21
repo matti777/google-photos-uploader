@@ -1,17 +1,16 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/matti777/google-photos-uploader/internal/config"
 	"github.com/matti777/google-photos-uploader/internal/files"
 	photos "github.com/matti777/google-photos-uploader/internal/googlephotos"
 	photosutil "github.com/matti777/google-photos-uploader/internal/googlephotos/util"
 	"github.com/matti777/google-photos-uploader/internal/logging"
+	"github.com/matti777/google-photos-uploader/internal/util"
 
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
@@ -30,6 +29,9 @@ func readFlags(c *cli.Context) {
 	log.Debugf("Recurse into subdirectories: %v", settings.Recurse)
 
 	settings.SkipConfirmation = c.IsSet("yes")
+	if settings.SkipConfirmation {
+		log.Debugf("--yes defined, will skip all confirmations")
+	}
 
 	settings.DryRun = c.IsSet("dry-run")
 	if settings.DryRun {
@@ -72,7 +74,7 @@ func handleAuthorize(c *cli.Context) error {
 	}
 
 	// Check if need to authenticate the user
-	if appConfig.AuthToken == nil || appConfig.UserInfo.ID == "" {
+	if appConfig.AuthToken == nil {
 		fmt.Printf("Authenticating you..\n")
 		a := photosutil.NewAuthenticator(appConfig.ClientID, appConfig.ClientSecret)
 		token, userInfo, err := a.Authorize()
@@ -82,22 +84,18 @@ func handleAuthorize(c *cli.Context) error {
 			fmt.Println("Authorization OK!")
 			appConfig.AuthToken = token
 			appConfig.UserInfo = *userInfo
-			// TODO REMOVE
-			log.Debugf("REMOVE ME: UserInfo: %+v", appConfig.UserInfo)
+
+			// TODO fetch further user info to get email address etc
+
 			config.MustWriteAppConfig(appConfig)
 		}
 		fmt.Printf("Authorized as '%v' (%v) -- specify --authorize to authorize "+
 			"on a different account.\n", appConfig.UserInfo.Name,
 			appConfig.UserInfo.Email)
-	} else if !settings.SkipConfirmation {
-		fmt.Printf("You have authenticated as %v (%v). Continue? [y/N]\n",
-			appConfig.UserInfo.Name, appConfig.UserInfo.Email)
-		reader := bufio.NewReader(os.Stdin)
-		res, _ := reader.ReadString('\n')
-		if strings.ToLower(strings.Trim(res, " \n\t\r")) != "y" {
-			fmt.Print("Re-run with --authorize to re-authorize as a different user.")
-			return cli.Exit("User aborted.", 0)
-		}
+	} else {
+		util.MustConfirm(fmt.Sprintf("You have authenticated as %v (%v).",
+			appConfig.UserInfo.Name, appConfig.UserInfo.Email),
+			"Re-run with --authorize to re-authorize as a different user.")
 	}
 
 	return nil
