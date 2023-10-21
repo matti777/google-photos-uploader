@@ -13,9 +13,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/gosuri/uiprogress"
 	"github.com/gosuri/uiprogress/util/strutil"
+	"github.com/pkg/errors"
 
 	"github.com/matti777/google-photos-uploader/internal/config"
-	"github.com/matti777/google-photos-uploader/internal/exif"
+	"github.com/matti777/google-photos-uploader/internal/exiftool"
 	photos "github.com/matti777/google-photos-uploader/internal/googlephotos"
 	"github.com/matti777/google-photos-uploader/internal/logging"
 	"github.com/matti777/google-photos-uploader/internal/util"
@@ -156,11 +157,17 @@ func upload(progress *uiprogress.Progress, dir string, file os.FileInfo,
 		fileDate := getDateForFile(albumYear, file)
 		log.Debugf("Writing file date %v for image: %v/%v to tempFile: %v",
 			fileDate, dir, file.Name(), tempFile.Name())
-		fileSize, err = exif.WriteImageDate(filePath, fileDate, tempFile.Name())
-		if err != nil {
-			log.Fatalf("failed to write EXIF info: %v", err)
+		if err := exiftool.SetAllDates(filePath, tempFile.Name(), fileDate); err != nil {
+			return "", err
 		}
+
+		// Point filePath and fileSize to the new file
 		filePath = tempFile.Name()
+		f, err := os.Stat(filePath)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to get file size")
+		}
+		fileSize = f.Size()
 	}
 
 	bar := progress.AddBar(int(fileSize)).PrependElapsed().AppendCompleted()

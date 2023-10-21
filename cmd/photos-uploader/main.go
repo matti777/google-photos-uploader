@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/matti777/google-photos-uploader/internal/config"
+	"github.com/matti777/google-photos-uploader/internal/exiftool"
 	"github.com/matti777/google-photos-uploader/internal/files"
 	photos "github.com/matti777/google-photos-uploader/internal/googlephotos"
 	photosutil "github.com/matti777/google-photos-uploader/internal/googlephotos/util"
@@ -131,6 +132,8 @@ func defaultAction(c *cli.Context) error {
 	log.SetLevel(logLevel)
 
 	readFlags(c)
+
+	exiftool.MustCheckExiftoolInstalled()
 
 	baseDir := c.Args().Get(0)
 	if baseDir == "" {
