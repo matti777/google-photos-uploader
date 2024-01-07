@@ -83,9 +83,11 @@ func (c *Client) ListAlbums() ([]*Album, error) {
 			req = req.PageToken(res.NextPageToken)
 		}
 
-		res, err := req.Do()
+		var err error
+
+		res, err = req.Do()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get albums: %w", err)
 		}
 
 		for _, a := range res.Albums {
