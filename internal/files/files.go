@@ -268,7 +268,7 @@ func handleFileUpload(absoluteDirPath string, files []fs.FileInfo,
 	}
 
 	// Ask the user whether to continue uploading to this album
-	util.MustConfirm(fmt.Sprintf("About to upload directory %v (%v image files) as album '%v'",
+	util.MustConfirm(fmt.Sprintf("About to upload directory %v (%v image files) to album '%v'",
 		absoluteDirPath, len(imageFiles), album.Title), "")
 
 	// Upload all the files in this directory
