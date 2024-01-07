@@ -25,7 +25,7 @@ func main() {
 
 	outputPath := "/tmp/test.jpg"
 
-	t := time.Date(1987, 4, 26, 0, 0, 0, 0, time.UTC)
+	t := time.Date(1987, 4, 26, 10, 11, 12, 0, time.UTC)
 	if err := exiftool.SetAllDates(os.Args[1], outputPath, t); err != nil {
 		log.Fatalf("failed to set EXIF date: %v", err)
 	}

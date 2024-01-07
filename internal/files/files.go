@@ -3,7 +3,6 @@ package files
 import (
 	"fmt"
 	"io/fs"
-	"io/ioutil"
 	"mime"
 	"os"
 	"path/filepath"
@@ -150,15 +149,18 @@ func upload(progress *uiprogress.Progress, dir string, file os.FileInfo,
 
 	// Write creation date to EXIF data so Google Photos album will get a proper year
 	if !settings.DryRun {
-		tempFile, err := ioutil.TempFile("", "*.jpeg")
+		tempFile, err := os.CreateTemp("", "*.jpeg")
 		if err != nil {
 			log.Fatalf("failed to create temp file: %v", err)
 		}
+		os.Remove(tempFile.Name())       // exiftool refuses to overwrite existing files
+		defer os.Remove(tempFile.Name()) // cleanup
+
 		fileDate := getDateForFile(albumYear, file)
 		log.Debugf("Writing file date %v for image: %v/%v to tempFile: %v",
 			fileDate, dir, file.Name(), tempFile.Name())
 		if err := exiftool.SetAllDates(filePath, tempFile.Name(), fileDate); err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to call exiftool.SetAllDates: %w", err)
 		}
 
 		// Point filePath and fileSize to the new file

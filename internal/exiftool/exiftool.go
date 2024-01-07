@@ -1,12 +1,11 @@
 package exiftool
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 const (
@@ -20,7 +19,7 @@ func IsInstalled() bool {
 }
 
 func MustCheckExiftoolInstalled() {
-	if IsInstalled() {
+	if !IsInstalled() {
 		fmt.Printf("This application requires the installation of exiftool.\n\n")
 		fmt.Printf("To install the tool:\n\n")
 		fmt.Printf("MacOS:\t\tbrew install exiftool\n")
@@ -32,11 +31,17 @@ func MustCheckExiftoolInstalled() {
 
 func SetAllDates(inFilePath, outFilePath string, exifDate time.Time) error {
 	allDates := fmt.Sprintf("-AllDates=\"%s\"", exifDate.Format(dateFormat))
-	cmd := exec.Command(binaryName, "-o", outFilePath, allDates, inFilePath)
-	_, err := cmd.Output()
+	args := []string{"-o", outFilePath, allDates, inFilePath}
 
-	if err != nil {
-		return errors.Wrap(err, "exiftool command failed")
+	cmd := exec.Command(binaryName, args...)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to call exiftool - stdout: %v, stderr: %v, error: %w",
+			stdout.String(), stderr.String(), err)
 	}
 
 	return nil
